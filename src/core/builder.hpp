@@ -1,0 +1,26 @@
+// Index builder: turns a Flipper-IRDB checkout into a Beamhound Index.
+#pragma once
+
+#include <functional>
+#include <map>
+#include <string>
+
+#include "core/index.hpp"
+
+namespace bh {
+
+struct BuildReport {
+    size_t files = 0;
+    long powerDecoded = 0, powerRaw = 0;
+    long skippedAc = 0, skippedUniversal = 0, skippedNoPower = 0, skippedPath = 0;
+    int propagated = 0;
+    std::map<Group, int> groups;
+    std::string error;
+};
+
+// Scans `rootDir` for .ir files. `progress(done, total)` is called periodically.
+// When `copyTo` is set, the used .ir files are copied there (keeping relative paths).
+bool buildIndex(const std::string& rootDir, Index& ix, BuildReport& rep,
+                const std::function<void(size_t, size_t)>& progress = {}, const std::string& copyTo = "");
+
+}  // namespace bh

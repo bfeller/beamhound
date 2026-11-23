@@ -21,7 +21,8 @@ static uint32_t tickMs() { return static_cast<uint32_t>(nowMs()); }
 static std::string dataDir()
 {
     if (const char* d = std::getenv("BEAMHOUND_DATA")) return d;
-    return "/usr/share/beamhound";
+    const char* home = std::getenv("HOME");
+    return std::string(home ? home : "/tmp") + "/.local/share/beamhound";
 }
 
 static std::string profileDir()
@@ -111,8 +112,33 @@ static void pump(App& app, int ms = 60)
 
 int main(int argc, char** argv)
 {
+    if (argc >= 3 && std::strcmp(argv[1], "--setup-test") == 0) {
+        // First-run flow against an empty BEAMHOUND_DATA: press Enter, snapshot each phase.
+        const std::string out = argv[2];
+        lv_init();
+        lv_tick_set_cb(tickMs);
+        lv_display_t* disp = lv_display_create(320, 170);
+        static uint16_t buf[320 * 170];
+        lv_display_set_buffers(disp, buf, nullptr, sizeof buf, LV_DISPLAY_RENDER_MODE_PARTIAL);
+        lv_display_set_flush_cb(disp, flushCb);
+        App app(dataDir(), profileDir());
+        app.init();
+        pump(app);
+        shot(disp, out + "/setup-0-idle.ppm");
+        app.kb().inject({Key::Enter, 0});
+        int n = 1;
+        std::string last;
+        for (int i = 0; i < 6000 && !app.index().remotes.size(); ++i) {
+            pump(app, 100);
+            if (i % 20 == 0) shot(disp, out + "/setup-" + std::to_string(n++) + ".ppm");
+        }
+        pump(app, 200);
+        shot(disp, out + "/setup-done.ppm");
+        std::printf("remotes loaded: %zu\n", app.index().remotes.size());
+        return app.index().remotes.empty() ? 1 : 0;
+    }
     if (argc < 3 || std::strcmp(argv[1], "--demo") != 0) {
-        std::fprintf(stderr, "usage: %s --demo <outdir> [remote-path-substring]\n", argv[0]);
+        std::fprintf(stderr, "usage: %s --demo <outdir> [remote-path-substring] | --setup-test <outdir>\n", argv[0]);
         return 2;
     }
     const std::string out = argv[2];

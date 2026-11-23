@@ -1,0 +1,66 @@
+# Application Store Publish Record
+
+Portal: <https://dev.cardputer.cc/#/upload>
+
+## Package
+
+- Debian package path: `build/pkg/beamhound_0.1.0_arm64.deb` (built with `make package`)
+- Package: `beamhound`
+- Version: `0.1.0`
+- Architecture: `arm64`
+- Maintainer: `Bryan Feller <6282600+bfeller@users.noreply.github.com>`
+- APPLaunch desktop path: `/usr/share/APPLaunch/applications/beamhound.desktop`
+- Executable path: `/usr/share/APPLaunch/bin/beamhound`
+- Depends: `libc6 (>= 2.34), curl, tar`
+
+## Source and Ownership
+
+- Public source repository: https://github.com/bfeller/beamhound
+- Expected GitHub uploader/owner: `bfeller`
+- Hide uploader email: `true`
+
+## Listing
+
+- Application name: Beamhound
+- One-line summary (maximum 80 characters): Sniffs out your IR remote from one button press and becomes it.
+- Description: see `store.description` in `app-builder.json`
+- Categories (maximum 6): Hardware & IoT, System Tools
+- Share code: `BEAM`
+- License: MIT
+- Permissions: network (first-run database download); everything else false
+
+## Assets
+
+- 256 x 256 source icon: `assets/images/beamhound_256.png` (from `assets/images/beamhound.svg`)
+- Icon packaged in `.deb`: `usr/share/APPLaunch/share/images/beamhound.png` (100 x 100)
+- Screenshot 1 (320 x 170): `store/screenshots/1-sniff.png`
+- Screenshot 2 (320 x 170): `store/screenshots/2-questions.png`
+- Screenshot 3 (320 x 170): `store/screenshots/3-found.png`
+- Screenshot 4 (320 x 170): `store/screenshots/4-remote.png`
+
+## Preflight
+
+- [x] `.deb` exists and can be parsed.
+- [x] Control fields contain Package, Version, Architecture, and Maintainer.
+- [x] Architecture is appropriate for the package (`arm64` for native binaries).
+- [x] APPLaunch `.desktop`, executable, and PNG icon exist inside the package.
+- [ ] Package name ownership and update version are valid (checked by the portal at upload).
+- [x] Listing copy and categories have been reviewed.
+- [x] Four clean 320 x 170 baseline screenshots exist.
+- [x] No credentials, tokens, or private server details are embedded.
+- [x] `prepublish_check.py` passed (2026-11-22).
+- [ ] The user explicitly approved external submission.
+
+## Notes
+
+- IR codes are not shipped in the package. The app downloads Flipper-IRDB commit
+  `d126fb1b6f1e114c52b4a8c19839ea65e3a9c24d` on first run (about 17 MB; about 1 minute
+  including indexing on the device).
+
+## Submission Result
+
+- Status: `not submitted`
+- Submitted at: TODO
+- Portal message: TODO
+- Actions URL: TODO
+- Tracking or pull-request URL: TODO

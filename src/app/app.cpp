@@ -128,11 +128,28 @@ void App::init()
             }
         },
         300, this);
-    show(Screen::Home);
+    show(indexOk_ ? Screen::Home : Screen::Setup);
 }
 
 void App::tick()
 {
+    if (screen_ == Screen::Setup) {
+        const auto ph = setup_.phase();
+        if (ph == DbSetup::Phase::Done) {
+            indexOk_ = ix_.load(dataDir_ + "/index.bin", indexError_);
+            if (indexOk_) {
+                sel_ = 0;
+                show(Screen::Home);
+                flash("Database ready");
+                return;
+            }
+        }
+        if (ph != setupShown_ || nowMs() - setupRefreshMs_ > 400) {
+            setupShown_ = ph;
+            setupRefreshMs_ = nowMs();
+            render();
+        }
+    }
     for (KeyEvent e = kb_.poll(); e.key != Key::None; e = kb_.poll()) onKey(e);
     std::vector<uint32_t> burst;
     if (rx_.poll(burst)) onIr(burst);
@@ -162,6 +179,7 @@ void App::render()
     statusLabel_ = nullptr;
     std::fill(std::begin(tiles_), std::end(tiles_), nullptr);
     switch (screen_) {
+    case Screen::Setup: buildSetup(); break;
     case Screen::Home: buildHome(); break;
     case Screen::Listen: buildListen(); break;
     case Screen::Question: buildQuestion(); break;
@@ -405,6 +423,55 @@ void App::buildConfirmDelete()
     footer("");
 }
 
+void App::buildSetup()
+{
+    titleBar("First-time setup", "");
+    const auto ph = setup_.phase();
+    const int x = 10, w = kW - 20;
+    switch (ph) {
+    case DbSetup::Phase::Idle:
+        text(root_, "Beamhound needs its remote database.", &lv_font_montserrat_14, kText, x, 28, w);
+        text(root_,
+             "It downloads the community Flipper-IRDB codes (about 17 MB) and indexes them on this device. "
+             "Connect to Wi-Fi, then press Enter.",
+             &lv_font_montserrat_12, kDim, x, 50, w, LV_TEXT_ALIGN_LEFT, LV_LABEL_LONG_MODE_WRAP);
+        footer("Enter download   Esc hold: exit");
+        return;
+    case DbSetup::Phase::Failed:
+        text(root_, "Setup didn't finish", &lv_font_montserrat_14, kPink, x, 28, w);
+        text(root_, setup_.error(), &lv_font_montserrat_12, kText, x, 50, w, LV_TEXT_ALIGN_LEFT,
+             LV_LABEL_LONG_MODE_WRAP);
+        footer("Enter try again   Esc hold: exit");
+        return;
+    default: break;
+    }
+    std::string headline, detail;
+    int pct = -1;
+    if (ph == DbSetup::Phase::Downloading) {
+        headline = "Downloading...";
+        char b[48];
+        std::snprintf(b, sizeof b, "%.1f MB received", setup_.done() / 1048576.0);
+        detail = b;
+    } else if (ph == DbSetup::Phase::Extracting) {
+        headline = "Unpacking...";
+        detail = "This takes a minute on the Cardputer.";
+    } else {
+        headline = "Indexing remotes...";
+        const size_t t = setup_.total(), d = setup_.done();
+        char b[48];
+        std::snprintf(b, sizeof b, "%zu / %zu files", d, t);
+        detail = b;
+        if (t) pct = static_cast<int>(d * 100 / t);
+    }
+    text(root_, headline, &lv_font_montserrat_16, kAmber, x, 40, w);
+    text(root_, detail, &lv_font_montserrat_12, kDim, x, 66, w);
+    lv_obj_t* track = box(root_, x, 92, w, 10, kCard, 5);
+    if (pct >= 0) box(track, 0, 0, std::max(10, w * pct / 100), 10, kAmber, 5);
+    else box(track, ((animPhase_ * 37) % (w - 60)), 0, 60, 10, kAmber, 5);
+    text(root_, "Codes: Flipper-IRDB community database", &lv_font_montserrat_10, kDim, x, 112, w);
+    footer("Please keep the Cardputer powered on");
+}
+
 // ------------------------------------------------------------------ flow
 void App::nextQuestion()
 {
@@ -524,6 +591,14 @@ void App::onKey(const KeyEvent& e)
         return;
     }
     switch (screen_) {
+    case Screen::Setup: {
+        const auto ph = setup_.phase();
+        if (e.key == Key::Enter && (ph == DbSetup::Phase::Idle || ph == DbSetup::Phase::Failed)) {
+            setup_.start(dataDir_);
+            render();
+        }
+        return;
+    }
     case Screen::Home: {
         const int count = 1 + static_cast<int>(profiles_.size());
         if (e.key == Key::Esc) return;  // hold Esc to exit

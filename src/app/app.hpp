@@ -8,6 +8,7 @@
 #include "core/index.hpp"
 #include "core/matcher.hpp"
 #include "lvgl.h"
+#include "app/setup.hpp"
 #include "platform/hw.hpp"
 
 namespace bh {
@@ -32,7 +33,7 @@ public:
     std::string dataDir() const { return dataDir_; }
 
 private:
-    enum class Screen { Home, Listen, Question, Result, Remote, AllButtons, Message, ConfirmDelete };
+    enum class Screen { Setup, Home, Listen, Question, Result, Remote, AllButtons, Message, ConfirmDelete };
 
     void show(Screen s);
     void render();
@@ -48,6 +49,7 @@ private:
     void buildAllButtons();
     void buildMessage();
     void buildConfirmDelete();
+    void buildSetup();
 
     // helpers
     lv_obj_t* titleBar(const std::string& title, const std::string& right);
@@ -89,6 +91,10 @@ private:
     std::vector<IrButton> buttons_;
     uint32_t resultRemote_ = 0;
     bool toggle_ = false;
+
+    DbSetup setup_;
+    DbSetup::Phase setupShown_ = DbSetup::Phase::Idle;
+    int64_t setupRefreshMs_ = 0;
 
     lv_obj_t* root_ = nullptr;
     lv_obj_t* statusLabel_ = nullptr;
