@@ -48,7 +48,7 @@ private:
 
 enum class Key : uint16_t {
     None = 0, Esc, LongEsc, Enter, Backspace, Space, Tab, Up, Down, Left, Right,
-    Mute, VolUp, VolDown, PlayPause, Home, Char,
+    Mute, VolUp, VolDown, PlayPause, Rewind, FastForward, BrightDown, BrightUp, Home, Char,
 };
 
 struct KeyEvent {

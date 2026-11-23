@@ -78,6 +78,7 @@ std::string upperLabel(Btn b)
 }
 
 // Remote screen layout: 4 rows x 5 tiles, D-pad in the right three columns.
+// The D-pad uses F/Z/X/C, the keys printed with arrows on the Cardputer keyboard.
 struct Tile {
     Btn btn;
     const char* label;
@@ -87,11 +88,11 @@ constexpr Tile kTiles[20] = {
     {Btn::Power, LV_SYMBOL_POWER " Power", "P"}, {Btn::Input, "Input", "T"},  {Btn::Menu, "Menu", "U"},
     {Btn::Home, LV_SYMBOL_HOME " Home", "H"},    {Btn::Mute, LV_SYMBOL_MUTE " Mute", "M"},
     {Btn::VolUp, "Vol +", "Q"},                   {Btn::ChUp, "Ch +", "W"},    {Btn::Back, "Back", LV_SYMBOL_BACKSPACE},
-    {Btn::Up, LV_SYMBOL_UP, "I"},                 {Btn::Info, "Info", "N"},
-    {Btn::VolDown, "Vol -", "A"},                 {Btn::ChDown, "Ch -", "S"},  {Btn::Left, LV_SYMBOL_LEFT, "J"},
-    {Btn::Ok, "OK", LV_SYMBOL_NEW_LINE},          {Btn::Right, LV_SYMBOL_RIGHT, "L"},
-    {Btn::PlayPause, LV_SYMBOL_PLAY " Play", "Spc"}, {Btn::Stop, LV_SYMBOL_STOP " Stop", "X"},
-    {Btn::Exit, "Exit", "E"},                     {Btn::Down, LV_SYMBOL_DOWN, "K"},
+    {Btn::Up, LV_SYMBOL_UP, "F"},                 {Btn::Info, "Info", "N"},
+    {Btn::VolDown, "Vol -", "A"},                 {Btn::ChDown, "Ch -", "S"},  {Btn::Left, LV_SYMBOL_LEFT, "Z"},
+    {Btn::Ok, "OK", LV_SYMBOL_NEW_LINE},          {Btn::Right, LV_SYMBOL_RIGHT, "C"},
+    {Btn::PlayPause, LV_SYMBOL_PLAY " Play", "Spc"}, {Btn::Stop, LV_SYMBOL_STOP " Stop", "V"},
+    {Btn::Exit, "Exit", "E"},                     {Btn::Down, LV_SYMBOL_DOWN, "X"},
     {Btn::None, LV_SYMBOL_LIST " All", "B"},
 };
 
@@ -369,7 +370,7 @@ void App::buildRemote()
              LV_TEXT_ALIGN_CENTER);
         tiles_[i] = tile;
     }
-    footer("B all buttons  0-9 digits  Z/C rew/ffwd  O off  Esc home");
+    footer("B all  0-9 digits  R/Y rew/ffwd  O off  Esc home");
 }
 
 void App::buildAllButtons()
@@ -501,6 +502,8 @@ bool App::sendButton(Btn b)
     // Fallbacks for remotes that only have the discrete variant.
     if (b == Btn::Power) return sendButton(Btn::PowerOn);
     if (b == Btn::PlayPause) return sendButton(Btn::Play);
+    if (b == Btn::Rewind) return sendButton(Btn::Prev);
+    if (b == Btn::FastForward) return sendButton(Btn::Next);
     flash(std::string("This remote has no ") + btnLabel(b));
     return false;
 }
@@ -719,6 +722,10 @@ void App::onKey(const KeyEvent& e)
         case Key::VolUp: b = Btn::VolUp; break;
         case Key::VolDown: b = Btn::VolDown; break;
         case Key::PlayPause: b = Btn::PlayPause; break;
+        case Key::Rewind: b = Btn::Rewind; break;
+        case Key::FastForward: b = Btn::FastForward; break;
+        case Key::BrightDown: b = Btn::Brightness_Down; break;
+        case Key::BrightUp: b = Btn::Brightness_Up; break;
         case Key::Home: b = Btn::Home; break;
         case Key::Char:
             if (e.ch >= '0' && e.ch <= '9') {
@@ -736,16 +743,20 @@ void App::onKey(const KeyEvent& e)
             case 'a': b = Btn::VolDown; break;
             case 'w': b = Btn::ChUp; break;
             case 's': b = Btn::ChDown; break;
+            case 'f':
             case 'i': b = Btn::Up; break;
+            case 'x':
             case 'k': b = Btn::Down; break;
+            case 'z':
             case 'j': b = Btn::Left; break;
+            case 'c':
             case 'l': b = Btn::Right; break;
             case 'n': b = Btn::Info; break;
             case 'g': b = Btn::Guide; break;
             case 'e': b = Btn::Exit; break;
-            case 'x': b = Btn::Stop; break;
-            case 'z': b = Btn::Rewind; break;
-            case 'c': b = Btn::FastForward; break;
+            case 'v': b = Btn::Stop; break;
+            case 'r': b = Btn::Rewind; break;
+            case 'y': b = Btn::FastForward; break;
             case 'b':
                 sel_ = 0;
                 status_.clear();

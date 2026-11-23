@@ -220,6 +220,12 @@ KeyEvent Keyboard::poll()
         case KEY_VOLUMEUP: return {Key::VolUp, 0};
         case KEY_VOLUMEDOWN: return {Key::VolDown, 0};
         case KEY_PLAYPAUSE: return {Key::PlayPause, 0};
+        // Fn-layer media keys printed on the Cardputer: Fn+W rewind, Fn+E fast-forward,
+        // Fn+U/I brightness down/up.
+        case KEY_PREVIOUSSONG: return {Key::Rewind, 0};
+        case KEY_NEXTSONG: return {Key::FastForward, 0};
+        case KEY_BRIGHTNESSDOWN: return {Key::BrightDown, 0};
+        case KEY_BRIGHTNESSUP: return {Key::BrightUp, 0};
         case KEY_HOME: return {Key::Home, 0};
         default: break;
         }
