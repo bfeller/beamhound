@@ -44,12 +44,12 @@ Portal: <https://dev.cardputer.cc/#/upload>
 - [x] Control fields contain Package, Version, Architecture, and Maintainer.
 - [x] Architecture is appropriate for the package (`arm64` for native binaries).
 - [x] APPLaunch `.desktop`, executable, and PNG icon exist inside the package.
-- [ ] Package name ownership and update version are valid (checked by the portal at upload).
+- [x] Package name ownership and update version are valid (portal accepted the upload).
 - [x] Listing copy and categories have been reviewed.
 - [x] Four clean 320 x 170 baseline screenshots exist.
 - [x] No credentials, tokens, or private server details are embedded.
 - [x] `prepublish_check.py` passed (2026-11-22).
-- [ ] The user explicitly approved external submission.
+- [x] The user explicitly approved external submission (submitted by the user via the portal).
 
 ## Notes
 
@@ -59,8 +59,10 @@ Portal: <https://dev.cardputer.cc/#/upload>
 
 ## Submission Result
 
-- Status: `not submitted`
-- Submitted at: TODO
-- Portal message: TODO
-- Actions URL: TODO
-- Tracking or pull-request URL: TODO
+- Status: `submitted, awaiting maintainer review` (first release requires a demo video in the PR)
+- Submitted at: 2026-11-23T01:36:08Z
+- Portal message: All automated checks passed. First release of a new app: post a short video of the app
+  running on a real device in the PR; a maintainer reviews and merges. Later updates merge automatically.
+- Package SHA-256: `a436b61801e113347bf00cf0acf218bf39bc2909cda11b57e5e440c2a14ce993` (matches local build)
+- Actions URL: https://github.com/CardputerZero/packages/actions/runs/45095456623
+- Tracking or pull-request URL: https://github.com/CardputerZero/packages/pull/685
