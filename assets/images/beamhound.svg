@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Beamhound</title>
+  <!-- IR beam arcs centred on the hound's nose -->
+  <path d="M 174.3 104 A 30 30 0 0 1 174.3 150" fill="none" stroke="#FF3D7F" stroke-width="12" stroke-linecap="round"/>
+  <path d="M 188.4 87.2 A 52 52 0 0 1 188.4 166.8" fill="none" stroke="#FF3D7F" stroke-width="12" stroke-linecap="round" opacity="0.8"/>
+  <path d="M 202.6 70.3 A 74 74 0 0 1 202.6 183.7" fill="none" stroke="#29C5F6" stroke-width="12" stroke-linecap="round"/>
+  <g transform="translate(-6,30) scale(0.82)">
+    <!-- neck + collar -->
+    <path d="M 60 170 L 52 236 L 128 236 L 130 182 Z" fill="#D9861A"/>
+    <rect x="50" y="196" width="84" height="16" rx="8" fill="#29C5F6"/>
+    <circle cx="98" cy="220" r="9" fill="#29C5F6"/>
+    <!-- head + snout -->
+    <circle cx="96" cy="118" r="58" fill="#F5A623"/>
+    <path d="M 104 96 L 176 104 Q 200 108 200 130 Q 200 152 176 154 L 112 160 Z" fill="#F5A623"/>
+    <path d="M 140 150 Q 160 148 176 140" fill="none" stroke="#B5650E" stroke-width="5" stroke-linecap="round"/>
+    <!-- nose -->
+    <ellipse cx="196" cy="118" rx="15" ry="13" fill="#2B2B2B"/>
+    <ellipse cx="192" cy="113" rx="5" ry="3.5" fill="#FFFFFF" opacity="0.55"/>
+    <!-- eye -->
+    <circle cx="118" cy="100" r="9" fill="#2B2B2B"/>
+    <circle cx="121" cy="97" r="3" fill="#FFFFFF"/>
+    <!-- floppy ear -->
+    <path d="M 70 70 Q 40 76 36 120 Q 32 170 58 184 Q 80 192 86 160 Q 92 110 84 80 Q 80 68 70 70 Z" fill="#B5650E"/>
+  </g>
+</svg>
