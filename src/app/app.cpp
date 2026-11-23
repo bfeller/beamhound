@@ -214,8 +214,10 @@ void App::list(const std::vector<std::string>& items, int top, int height, bool 
 void App::listNav(const KeyEvent& e, int count)
 {
     if (count <= 0) return;
-    const bool up = e.key == Key::Up || (e.key == Key::Char && (e.ch == 'w' || e.ch == 'i'));
-    const bool down = e.key == Key::Down || (e.key == Key::Char && (e.ch == 's' || e.ch == 'k'));
+    // F/X are the keys printed with the up/down arrows on the Cardputer keyboard, so they
+    // move without holding Fn. W/S and I/K also work.
+    const bool up = e.key == Key::Up || (e.key == Key::Char && (e.ch == 'f' || e.ch == 'w' || e.ch == 'i'));
+    const bool down = e.key == Key::Down || (e.key == Key::Char && (e.ch == 'x' || e.ch == 's' || e.ch == 'k'));
     if (up) sel_ = (sel_ + count - 1) % count;
     if (down) sel_ = (sel_ + 1) % count;
     if (up || down) render();
@@ -236,8 +238,8 @@ void App::buildHome()
     } else if (profiles_.empty()) {
         text(root_, "Saved remotes will appear here.", &lv_font_montserrat_10, kDim, 6, 134, kW - 12);
     }
-    footer(profiles_.empty() ? "Enter select  " LV_SYMBOL_UP LV_SYMBOL_DOWN " move  Esc hold: exit"
-                             : "Enter select  D delete  " LV_SYMBOL_UP LV_SYMBOL_DOWN " move  Esc hold: exit");
+    footer(profiles_.empty() ? "Enter select  F/X move  Esc hold: exit"
+                             : "Enter select  D delete  F/X move  Esc hold: exit");
 }
 
 void App::buildListen()
@@ -288,6 +290,7 @@ void App::buildQuestion()
         auto items = q_.options;
         items.push_back("Not sure");
         list(items, top + 20, 108, true);
+        hint = "1-9 / F/X + Enter pick  " LV_SYMBOL_BACKSPACE " undo  Esc cancel";
         break;
     }
     case Question::Kind::Brand: {
@@ -296,6 +299,7 @@ void App::buildQuestion()
         items.push_back("Other / not listed");
         items.push_back("Not sure");
         list(items, top + 20, 108, true);
+        hint = "1-9 / F/X + Enter pick  " LV_SYMBOL_BACKSPACE " undo  Esc cancel";
         break;
     }
     case Question::Kind::TestSend:
@@ -314,7 +318,7 @@ void App::buildQuestion()
     case Question::Kind::PickRemote:
         text(root_, "Pick one to try (T = test power)", &lv_font_montserrat_14, kText, 8, top);
         list(q_.options, top + 20, 108, true);
-        hint = "Enter choose  T test  Esc cancel";
+        hint = "F/X move  Enter choose  T test  Esc cancel";
         break;
     default: break;
     }
@@ -378,7 +382,7 @@ void App::buildAllButtons()
     if (items.empty()) items.push_back("(no buttons)");
     sel_ = std::clamp(sel_, 0, static_cast<int>(items.size()) - 1);
     list(items, kTitleH + 3, 130, false);
-    footer("Enter send  " LV_SYMBOL_UP LV_SYMBOL_DOWN " move  Esc back");
+    footer("Enter send  F/X move  Esc back");
 }
 
 void App::buildMessage()
