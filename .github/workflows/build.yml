@@ -1,0 +1,109 @@
+# Build and test on every push/PR; on a version tag (vX.Y.Z) also build the
+# Application Store .deb and publish it as a GitHub Release.
+# Publishing to the store itself stays manual (developer portal); see docs/RELEASING.md.
+name: build
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LVGL_VERSION: v9.5.0
+  # Must match kIrdbCommit in src/app/setup.hpp (the data the app downloads on first run).
+  IRDB_COMMIT: d126fb1b6f1e114c52b4a8c19839ea65e3a9c24d
+  # CardputerZero/skill: provides the store's prepublish_check.py.
+  STORE_SKILL_COMMIT: 2a061c0908c40676837d7d40e40b23ac43a2f888
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Cache LVGL and Flipper-IRDB
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps/lvgl
+            .cache/irdb
+          key: deps-${{ env.LVGL_VERSION }}-${{ env.IRDB_COMMIT }}
+
+      - name: Fetch dependencies
+        run: |
+          [ -d deps/lvgl ] || git clone -q --depth 1 --branch "$LVGL_VERSION" https://github.com/lvgl/lvgl.git deps/lvgl
+          if [ ! -d .cache/irdb ]; then
+            mkdir -p .cache/irdb
+            curl -fsSL "https://codeload.github.com/Lucaslhm/Flipper-IRDB/tar.gz/$IRDB_COMMIT" \
+              | tar -xz -C .cache/irdb --strip-components=1 --wildcards '*.ir'
+          fi
+
+      - name: Check versions agree
+        run: |
+          version=$(make -s version)
+          echo "app-builder.json version: $version"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$version" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match app-builder.json version $version (run tools/bump_version.sh)"
+            exit 1
+          fi
+          grep -q "kIrdbCommit = \"$IRDB_COMMIT\"" src/app/setup.hpp \
+            || { echo "::error::IRDB_COMMIT in the workflow differs from kIrdbCommit in src/app/setup.hpp"; exit 1; }
+
+      - name: Tests (decoder, database consistency, matcher simulation)
+        run: |
+          make -j"$(nproc)" tools
+          ./build/host/test_core .cache/irdb | tail -20
+          ./build/host/build_index .cache/irdb build/data
+          ./build/host/sim build/data/index.bin 1500 | tee sim.txt
+          grep -q "(100.0%)" sim.txt || { echo "::error::matcher simulation is no longer 100% correct"; exit 1; }
+
+      - name: Cross-compile and package
+        run: make -j"$(nproc)" package
+
+      - name: Store prepublish check
+        run: |
+          curl -fsSL -o prepublish_check.py \
+            "https://raw.githubusercontent.com/CardputerZero/skill/$STORE_SKILL_COMMIT/cardputer-app-publish/scripts/prepublish_check.py"
+          python3 prepublish_check.py --deb build/pkg/beamhound_$(make -s version)_arm64.deb --app-dir .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beamhound-deb
+          path: build/pkg/*.deb
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: beamhound-deb
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          deb=$(ls *.deb)
+          sha=$(sha256sum "$deb" | cut -d' ' -f1)
+          cat > notes.md <<EOF
+          Store package: \`$deb\`
+          SHA-256: \`$sha\`
+
+          To publish: download the .deb below and upload it at https://dev.cardputer.cc/#/upload
+          (source repository: https://github.com/${GITHUB_REPOSITORY}). Updates to an already
+          published app merge automatically once the store's checks pass.
+          EOF
+          gh release create "$GITHUB_REF_NAME" "$deb" --title "Beamhound $GITHUB_REF_NAME" \
+            --notes-file notes.md --verify-tag

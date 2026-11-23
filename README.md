@@ -64,6 +64,17 @@ make tools test # index builder, decoder tests and the matcher simulation (needs
 Building directly on the Cardputer (`make`) works but takes a long time and a lot of memory, so
 cross-compiling is recommended. `make cross` targets glibc 2.36 and links libc++ statically.
 
+## Releasing
+
+Tag a version and CI builds, tests and attaches the store package to a GitHub Release:
+
+```sh
+tools/bump_version.sh 0.1.1
+git commit -am "Release v0.1.1" && git tag v0.1.1 && git push && git push origin v0.1.1
+```
+
+Then upload the `.deb` from the release to the store portal. Full steps: [docs/RELEASING.md](docs/RELEASING.md).
+
 ## Layout
 
 - `src/core/`: IR codec, `.ir` parser, index format and builder, matcher (no UI dependencies)

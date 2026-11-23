@@ -32,7 +32,7 @@ DSK_DIR := build/desktop
 DEV_OBJS := $(call objs,$(DEV_DIR),$(LVGL_SRCS) $(APP_SRCS))
 DSK_OBJS := $(call objs,$(DSK_DIR),$(LVGL_SRCS) $(APP_SRCS))
 
-.PHONY: all device desktop cross deploy package tools test install clean
+.PHONY: all device desktop cross deploy package tools test version install clean
 all: device
 
 # Cross-compile the device binary on a PC with Zig: targets glibc 2.36 (Cardputer has 2.41)
@@ -44,7 +44,8 @@ cross:
 	$(MAKE) device DEV_DIR=build/cross CC="$(ZIG) cc $(ZFLAGS)" CXX="$(ZIG) c++ $(ZFLAGS)" LDFLAGS=-s
 
 # Build the Application Store package from the cross-compiled binary.
-VERSION ?= 0.1.0
+# The version lives in app-builder.json only (tools/bump_version.sh updates it).
+VERSION ?= $(shell sed -n 's/^  "version": *"\([^"]*\)".*/\1/p' app-builder.json)
 MAINTAINER ?= Bryan Feller <6282600+bfeller@users.noreply.github.com>
 DEB := build/pkg/beamhound_$(VERSION)_arm64.deb
 package: cross
@@ -107,6 +108,9 @@ install: $(DEV_DIR)/beamhound
 	install -m 755 $(DEV_DIR)/beamhound $(PREFIX_APP)/bin/beamhound
 	install -m 644 packaging/beamhound.desktop $(PREFIX_APP)/applications/beamhound.desktop
 	install -m 644 assets/images/beamhound_100.png $(PREFIX_APP)/share/images/beamhound.png
+
+version:
+	@echo $(VERSION)
 
 clean:
 	rm -rf build/device build/desktop build/cross build/pkg
