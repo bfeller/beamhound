@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Beamhound
+Exec=/usr/share/APPLaunch/bin/beamhound
+Terminal=false
+Icon=share/images/beamhound.png
+Type=Application

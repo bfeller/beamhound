@@ -48,6 +48,8 @@ public:
     void answerBrandOther(const std::vector<uint32_t>& listed);
     void answerTest(uint32_t remote, Btn b, bool reacted);
     void answerPick(uint32_t remote);
+    // "Not sure": never ask this question again, without narrowing.
+    void skip(const Question& q);
     bool undo();
 
     // Best guess right now: richest remote of the most likely code set.

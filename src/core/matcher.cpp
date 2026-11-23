@@ -303,6 +303,15 @@ bool Matcher::answerPress(Btn b, const std::vector<uint32_t>& timings, std::stri
 
 void Matcher::answerNoSuchButton(Btn b) { asked_.insert(askKey(Question::Kind::PressButton, b)); }
 
+void Matcher::skip(const Question& q)
+{
+    if (q.kind == Question::Kind::TestSend) {
+        for (uint64_t k : ix_.keysFor(q.testRemote, q.btn)) tested_.insert(k);
+        return;
+    }
+    asked_.insert(askKey(q.kind, q.kind == Question::Kind::PressButton ? q.btn : Btn::None));
+}
+
 void Matcher::answerCategory(Group g)
 {
     std::vector<uint32_t> keep;
