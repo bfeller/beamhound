@@ -1,6 +1,6 @@
 {
   "package_name": "beamhound",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "app_name": "Beamhound",
   "bin_name": "beamhound",
   "description": "Identify any IR remote and turn the Cardputer Zero into it",
