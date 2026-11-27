@@ -2,6 +2,8 @@
 //   Device build: draws to the Cardputer LCD framebuffer, reads the keyboard and IR.
 //   Desktop build (BH_DESKTOP): headless; `beamhound --demo <dir>` runs a scripted
 //   walkthrough against the real index and writes a PPM screenshot per step.
+#include <algorithm>
+#include <cctype>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -167,8 +169,10 @@ int main(int argc, char** argv)
     // Pick the demo "user's" remote and press its power button.
     const Index& ix = app.index();
     std::vector<IrButton> truth;
+    uint32_t truthId = 0;
     for (uint32_t r = 0; r < ix.remotes.size() && truth.empty(); ++r) {
         if (ix.str(ix.remotes[r].path).find(want) == std::string::npos) continue;
+        truthId = r;
         truth = loadIrFile(app.dataDir() + "/irdb/" + ix.str(ix.remotes[r].path));
         std::printf("demo remote: %s\n", ix.str(ix.remotes[r].path).c_str());
     }
@@ -218,6 +222,71 @@ int main(int argc, char** argv)
     app.kb().inject({Key::Esc, 0});
     pump(app);
     snap("home-saved");
+
+    // Second walkthrough: the same device found without its remote (brand code search).
+    app.kb().inject({Key::Down, 0});
+    pump(app);
+    snap("home-nr");
+    app.kb().inject({Key::Enter, 0});
+    pump(app);
+    snap("brand-search");
+    const std::string brandName = ix.str(ix.remotes[truthId].brand);
+    for (size_t i = 0; i < brandName.size() && i < 4; ++i) {
+        const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(brandName[i])));
+        app.kb().inject(c == ' ' ? KeyEvent{Key::Space, 0} : KeyEvent{Key::Char, c});
+    }
+    pump(app);
+    snap("brand-typed");
+    app.kb().inject({Key::Enter, 0});
+    pump(app);
+    const Question cq = app.matcher().categoryQuestion();
+    if (cq.kind == Question::Kind::Category) {
+        snap("nr-category");
+        const auto& v = cq.values;
+        const auto it = std::find(v.begin(), v.end(), static_cast<uint32_t>(ix.remotes[truthId].group));
+        const int idx = it == v.end() ? static_cast<int>(v.size()) : static_cast<int>(it - v.begin());  // "Not sure"
+        app.kb().inject({Key::Char, static_cast<char>('1' + std::min(idx, 8))});
+        pump(app);
+    }
+    snap("code-search");
+    auto reacts = [&](const PowerCode& c) {
+        for (const Sig* s = ix.remoteSigsBegin(truthId); s != ix.remoteSigsEnd(truthId); ++s)
+            if (c.key && s->key == c.key && (s->btn == Btn::Power || s->btn == Btn::PowerOff)) return true;
+        return false;
+    };
+    const auto codes = app.matcher().powerCodes();
+    size_t hit = 0;
+    while (hit + 1 < codes.size() && !reacts(codes[hit])) ++hit;
+    for (size_t i = 0; i <= hit; ++i) {
+        app.kb().inject({Key::Space, 0});
+        pump(app);
+        if (i == 0) snap("code-sent");
+    }
+    snap("code-hit");
+    app.kb().inject({Key::Enter, 0});
+    pump(app);
+    snap("code-confirm");
+    app.kb().inject({Key::Enter, 0});
+    pump(app);
+    snap("code-confirm-sent");
+    app.kb().inject({Key::Char, 'y'});
+    pump(app);
+    for (int i = 0; i < 8 && !app.matcher().done(); ++i) {
+        const Question q = app.matcher().next();
+        snap("nr-question");
+        if (q.kind == Question::Kind::TestSend) {
+            const auto sent = ix.keysFor(q.testRemote, q.btn), mine = ix.keysFor(truthId, q.btn);
+            const bool yes = std::any_of(sent.begin(), sent.end(), [&](uint64_t k) {
+                return std::find(mine.begin(), mine.end(), k) != mine.end();
+            });
+            app.kb().inject({Key::Enter, 0});
+            app.kb().inject({Key::Char, yes ? 'y' : 'n'});
+        } else {
+            app.kb().inject({Key::Char, '1'});
+        }
+        pump(app);
+    }
+    snap("nr-result");
     return 0;
 }
 

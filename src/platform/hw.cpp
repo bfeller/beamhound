@@ -206,34 +206,36 @@ KeyEvent Keyboard::poll()
             continue;
         }
         if (ev.value == 0) continue;  // act on press and auto-repeat
+        const bool rep = ev.value == 2;
+        auto mk = [rep](Key k, char c = 0) { return KeyEvent{k, c, rep}; };
         static const char letters[] = "qwertyuiop\0\0\0\0asdfghjkl\0\0\0\0\0zxcvbnm";
         switch (ev.code) {
-        case KEY_ENTER: return {Key::Enter, 0};
-        case KEY_BACKSPACE: return {Key::Backspace, 0};
-        case KEY_SPACE: return {Key::Space, 0};
-        case KEY_TAB: return {Key::Tab, 0};
-        case KEY_UP: return {Key::Up, 0};
-        case KEY_DOWN: return {Key::Down, 0};
-        case KEY_LEFT: return {Key::Left, 0};
-        case KEY_RIGHT: return {Key::Right, 0};
-        case KEY_MUTE: return {Key::Mute, 0};
-        case KEY_VOLUMEUP: return {Key::VolUp, 0};
-        case KEY_VOLUMEDOWN: return {Key::VolDown, 0};
-        case KEY_PLAYPAUSE: return {Key::PlayPause, 0};
+        case KEY_ENTER: return mk(Key::Enter);
+        case KEY_BACKSPACE: return mk(Key::Backspace);
+        case KEY_SPACE: return mk(Key::Space);
+        case KEY_TAB: return mk(Key::Tab);
+        case KEY_UP: return mk(Key::Up);
+        case KEY_DOWN: return mk(Key::Down);
+        case KEY_LEFT: return mk(Key::Left);
+        case KEY_RIGHT: return mk(Key::Right);
+        case KEY_MUTE: return mk(Key::Mute);
+        case KEY_VOLUMEUP: return mk(Key::VolUp);
+        case KEY_VOLUMEDOWN: return mk(Key::VolDown);
+        case KEY_PLAYPAUSE: return mk(Key::PlayPause);
         // Fn-layer media keys printed on the Cardputer: Fn+W rewind, Fn+E fast-forward,
         // Fn+U/I brightness down/up.
-        case KEY_PREVIOUSSONG: return {Key::Rewind, 0};
-        case KEY_NEXTSONG: return {Key::FastForward, 0};
-        case KEY_BRIGHTNESSDOWN: return {Key::BrightDown, 0};
-        case KEY_BRIGHTNESSUP: return {Key::BrightUp, 0};
-        case KEY_HOME: return {Key::Home, 0};
+        case KEY_PREVIOUSSONG: return mk(Key::Rewind);
+        case KEY_NEXTSONG: return mk(Key::FastForward);
+        case KEY_BRIGHTNESSDOWN: return mk(Key::BrightDown);
+        case KEY_BRIGHTNESSUP: return mk(Key::BrightUp);
+        case KEY_HOME: return mk(Key::Home);
         default: break;
         }
-        if (ev.code >= KEY_1 && ev.code <= KEY_9) return {Key::Char, static_cast<char>('1' + (ev.code - KEY_1))};
-        if (ev.code == KEY_0) return {Key::Char, '0'};
+        if (ev.code >= KEY_1 && ev.code <= KEY_9) return mk(Key::Char, static_cast<char>('1' + (ev.code - KEY_1)));
+        if (ev.code == KEY_0) return mk(Key::Char, '0');
         if (ev.code >= KEY_Q && ev.code <= KEY_M) {
             const char c = letters[ev.code - KEY_Q];
-            if (c) return {Key::Char, c};
+            if (c) return mk(Key::Char, c);
         }
     }
     return {};

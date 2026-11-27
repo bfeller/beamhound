@@ -52,13 +52,20 @@ bool Matcher::undo()
     return true;
 }
 
-Matcher::StartResult Matcher::start(const std::vector<uint32_t>& timings)
+void Matcher::reset()
 {
     cand_.clear();
     asked_.clear();
     tested_.clear();
     history_.clear();
+    heard_.reset();
     fuzzy_ = false;
+    noRemote_ = false;
+}
+
+Matcher::StartResult Matcher::start(const std::vector<uint32_t>& timings)
+{
+    reset();
     heard_ = decode(timings);
     std::vector<uint32_t> found;
     if (heard_) {
@@ -140,8 +147,9 @@ Question Matcher::next() const
     for (auto& [rep, w] : reps) W += w;
     double bestScore = 0.97;  // must remove at least ~3% (effort-weighted) to be worth asking
 
-    // --- press a button on your remote
+    // --- press a button on your remote (only when the user has it)
     for (Btn b : kPressOrder) {
+        if (noRemote_) break;
         if (asked_.count(askKey(Question::Kind::PressButton, b))) continue;
         std::map<uint64_t, double> bucket;
         double none = 0;
@@ -177,14 +185,7 @@ Question Matcher::next() const
             const double score = exp / total * kEffortCategory;
             if (score < bestScore) {
                 bestScore = score;
-                best = Question{Question::Kind::Category, Btn::None, 0, {}, {}};
-                std::vector<std::pair<double, Group>> order;
-                for (auto& [g, w] : bucket) order.emplace_back(w, g);
-                std::sort(order.rbegin(), order.rend());
-                for (auto& [w, g] : order) {
-                    best.options.push_back(groupLabel(g));
-                    best.values.push_back(static_cast<uint32_t>(g));
-                }
+                best = categoryQuestion();
             }
         }
     }
@@ -365,6 +366,143 @@ void Matcher::answerPick(uint32_t remote)
         if (ix_.remotes[r].codeset == ix_.remotes[remote].codeset) keep.push_back(r);
     push();
     setCandidates(keep.empty() ? std::vector<uint32_t>{remote} : keep);
+}
+
+// ------------------------------------------------------------------ no original remote
+
+void Matcher::startBrand(uint32_t brand)
+{
+    reset();
+    noRemote_ = true;
+    std::vector<uint32_t> c;
+    for (uint32_t r = 0; r < ix_.remotes.size(); ++r)
+        if (ix_.remotes[r].brand == brand) c.push_back(r);
+    setCandidates(std::move(c));
+}
+
+Question Matcher::categoryQuestion() const
+{
+    Question q;
+    std::map<Group, double> bucket;
+    for (uint32_t r : cand_)
+        if (ix_.remotes[r].group != Group::Unknown) bucket[ix_.remotes[r].group] += 1;
+    if (bucket.size() < 2) return q;
+    q.kind = Question::Kind::Category;
+    std::vector<std::pair<double, Group>> order;
+    for (auto& [g, w] : bucket) order.emplace_back(w, g);
+    std::sort(order.rbegin(), order.rend());
+    for (auto& [w, g] : order) {
+        q.options.push_back(groupLabel(g));
+        q.values.push_back(static_cast<uint32_t>(g));
+    }
+    return q;
+}
+
+namespace {
+constexpr double kRawSame = 0.85;  // same threshold as matching a live capture
+constexpr uint16_t kRawMinLen = 8;  // shorter "signals" are recording junk, not a sendable frame
+
+std::vector<uint32_t> rawTimings(const Index& ix, const RawSig& rs)
+{
+    return std::vector<uint32_t>(ix.rawData.begin() + rs.offset, ix.rawData.begin() + rs.offset + rs.len);
+}
+}  // namespace
+
+std::vector<PowerCode> Matcher::powerCodes() const
+{
+    std::vector<PowerCode> out;
+    std::vector<int> tier;  // 0 = toggle / off, 1 = power-on only
+    std::unordered_map<uint64_t, size_t> byKey, byOnKey;
+    std::set<uint32_t> covered;
+
+    // Raw power signals of the candidates, grouped by remote.
+    std::unordered_map<uint32_t, std::vector<size_t>> rawOf;
+    for (size_t i = 0; i < ix_.rawSigs.size(); ++i)
+        if (std::binary_search(cand_.begin(), cand_.end(), ix_.rawSigs[i].remote))
+            rawOf[ix_.rawSigs[i].remote].push_back(i);
+
+    auto addKeys = [&](uint32_t r, bool onOnly, int t) {
+        std::set<size_t> counted;
+        for (const Sig* s = ix_.remoteSigsBegin(r); s != ix_.remoteSigsEnd(r); ++s) {
+            const bool want = onOnly ? s->btn == Btn::PowerOn : (s->btn == Btn::Power || s->btn == Btn::PowerOff);
+            if (!want) continue;
+            // Power On is its own pass (device switched off), so it never merges with a toggle code.
+            auto [it, ins] = (onOnly ? byOnKey : byKey).emplace(s->key, out.size());
+            if (ins) {
+                out.push_back({s->btn, s->key, -1, r, 0});
+                tier.push_back(t);
+            }
+            if (counted.insert(it->second).second) ++out[it->second].weight;
+        }
+        return !counted.empty();
+    };
+    auto addRaw = [&](uint32_t r, bool onOnly, int t) {
+        auto it = rawOf.find(r);
+        if (it == rawOf.end()) return false;
+        std::set<size_t> counted;
+        for (size_t ri : it->second) {
+            const RawSig& rs = ix_.rawSigs[ri];
+            const bool want = onOnly ? rs.btn == Btn::PowerOn : (rs.btn == Btn::Power || rs.btn == Btn::PowerOff);
+            if (!want || rs.len < kRawMinLen) continue;
+            const auto shape = rawTimings(ix_, rs);
+            size_t hit = out.size();
+            for (size_t e = 0; e < out.size() && hit == out.size(); ++e)
+                if (out[e].key == 0 && tier[e] == t && rawSimilarity(ix_.rawData.data() + ix_.rawSigs[out[e].raw].offset,
+                                                     ix_.rawSigs[out[e].raw].len, shape) >= kRawSame)
+                    hit = e;
+            if (hit == out.size()) {
+                out.push_back({rs.btn, 0, static_cast<int>(ri), r, 0});
+                tier.push_back(t);
+            }
+            if (counted.insert(hit).second) ++out[hit].weight;
+        }
+        return !counted.empty();
+    };
+
+    for (uint32_t r : cand_)
+        if (addKeys(r, false, 0)) covered.insert(r);
+    for (uint32_t r : cand_)
+        if (!covered.count(r) && addRaw(r, false, 0)) covered.insert(r);
+    for (uint32_t r : cand_) {
+        if (covered.count(r)) continue;
+        const bool keyed = addKeys(r, true, 1);
+        const bool raw = addRaw(r, true, 1);  // both: a remote may store several power-on signals
+        if (keyed || raw) covered.insert(r);
+    }
+
+    std::vector<size_t> order(out.size());
+    for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        if (tier[a] != tier[b]) return tier[a] < tier[b];
+        return out[a].weight > out[b].weight;
+    });
+    std::vector<PowerCode> sorted;
+    for (size_t i : order) sorted.push_back(out[i]);
+    return sorted;
+}
+
+void Matcher::answerPowerCode(const PowerCode& c)
+{
+    std::vector<uint32_t> keep;
+    if (c.key) {
+        for (uint32_t r : cand_)
+            for (const Sig* s = ix_.remoteSigsBegin(r); s != ix_.remoteSigsEnd(r); ++s)
+                if (s->key == c.key && isPowerClass(s->btn)) {
+                    keep.push_back(r);
+                    break;
+                }
+    } else if (c.raw >= 0) {
+        const RawSig& ref = ix_.rawSigs[c.raw];
+        for (const auto& rs : ix_.rawSigs)
+            if (std::binary_search(cand_.begin(), cand_.end(), rs.remote) &&
+                rawSimilarity(ix_.rawData.data() + ref.offset, ref.len, rawTimings(ix_, rs)) >= kRawSame)
+                keep.push_back(rs.remote);
+    }
+    push();
+    // The power signal is settled: never test-send it again.
+    if (c.key) tested_.insert(c.key);
+    for (uint64_t k : ix_.keysFor(c.remote, c.btn)) tested_.insert(k);
+    if (!keep.empty()) setCandidates(std::move(keep));
 }
 
 std::vector<uint32_t> Matcher::rankedRemotes(size_t max) const

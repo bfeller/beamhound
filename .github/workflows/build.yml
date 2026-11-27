@@ -62,7 +62,8 @@ jobs:
           ./build/host/test_core .cache/irdb | tail -20
           ./build/host/build_index .cache/irdb build/data
           ./build/host/sim build/data/index.bin 1500 | tee sim.txt
-          grep -q "(100.0%)" sim.txt || { echo "::error::matcher simulation is no longer 100% correct"; exit 1; }
+          # Both variants (with the original remote, and brand code search without it) must be 100%.
+          [ "$(grep -c "(100.0%)" sim.txt)" -eq 2 ] || { echo "::error::matcher simulation is no longer 100% correct"; exit 1; }
 
       - name: Cross-compile and package
         run: make -j"$(nproc)" package

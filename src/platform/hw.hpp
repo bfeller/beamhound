@@ -54,6 +54,7 @@ enum class Key : uint16_t {
 struct KeyEvent {
     Key key = Key::None;
     char ch = 0;  // for Key::Char: lowercase letter or digit
+    bool repeat = false;  // auto-repeat of a held key
 };
 
 class Keyboard {

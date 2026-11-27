@@ -33,7 +33,10 @@ public:
     std::string dataDir() const { return dataDir_; }
 
 private:
-    enum class Screen { Setup, Home, Listen, Question, Result, Remote, AllButtons, Message, ConfirmDelete };
+    enum class Screen {
+        Setup, Home, Listen, Question, Result, Remote, AllButtons, Message, ConfirmDelete,
+        BrandSearch, CodeSearch, CodeConfirm,
+    };
 
     void show(Screen s);
     void render();
@@ -50,6 +53,9 @@ private:
     void buildMessage();
     void buildConfirmDelete();
     void buildSetup();
+    void buildBrandSearch();
+    void buildCodeSearch();
+    void buildCodeConfirm();
 
     // helpers
     lv_obj_t* titleBar(const std::string& title, const std::string& right);
@@ -65,6 +71,12 @@ private:
     void loadProfiles();
     void saveProfiles();
     void flash(const std::string& msg);
+    // Code search (no original remote).
+    void refreshBrandMatches();
+    void pickBrand(uint32_t brand);
+    void startCodeSearch();
+    void tryCode(int pos);
+    bool sendPowerCode(const PowerCode& c);
 
     std::string dataDir_, profileDir_;
     Index ix_;
@@ -90,6 +102,17 @@ private:
     Profile current_;
     std::vector<IrButton> buttons_;
     uint32_t resultRemote_ = 0;
+
+    // Code search state.
+    std::string brandFilter_;
+    std::vector<uint32_t> brandMatches_;  // brand string ids
+    bool codeSearchPending_ = false;      // category question first, then code search
+    std::vector<PowerCode> codes_;
+    int codePos_ = -1;                    // code last sent; -1 = none yet
+    bool offNotice_ = false;              // showing "now turn the device off" before Power On codes
+    bool codesExhausted_ = false;
+    bool confirmSent_ = false;            // CodeConfirm: code re-sent, waiting for yes/no
+    int codeSearchDepth_ = 0;             // matcher history depth once a power code is accepted
     bool toggle_ = false;
 
     DbSetup setup_;

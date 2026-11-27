@@ -8,8 +8,9 @@ as package `beamhound` (share code BEAM). Release process: `docs/RELEASING.md`.
 
 - Dependencies: `git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git deps/lvgl`.
   Tests and demos need an index: `make tools && ./build/host/build_index <Flipper-IRDB checkout> build/data`.
-- `make tools test`: decoder tests + matcher simulation. Keep the simulation at 100% correct
-  (CI enforces it).
+- `make tools test`: decoder tests + matcher simulation. The sim runs two variants, "with remote"
+  (sniff POWER, answer questions) and "no remote" (brand code search: step through
+  `Matcher::powerCodes()`, then test-send questions only). Keep both at 100% correct (CI enforces it).
 - `make desktop` builds a headless preview. `BEAMHOUND_DATA=build/data HOME=<tmp> ./build/desktop/beamhound --demo <dir> [remote-path]`
   writes a PPM screenshot of every screen; `--setup-test <dir>` exercises the first-run download.
   Check UI changes this way (convert with ImageMagick) before deploying.

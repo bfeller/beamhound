@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <tuple>
+#include <unordered_map>
 
 namespace bh {
 namespace {
@@ -69,6 +71,18 @@ std::string shortGroup(Group g)
     default: return "Device";
     }
 }
+
+// Lowercase letters and digits only, so "bnk" finds "BnK Components".
+std::string searchKey(const std::string& in)
+{
+    std::string out;
+    for (char c : in)
+        if (std::isalnum(static_cast<unsigned char>(c))) out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+// Home screen actions before the saved remotes.
+constexpr int kHomeActions = 2;
 
 std::string upperLabel(Btn b)
 {
@@ -188,6 +202,9 @@ void App::render()
     case Screen::AllButtons: buildAllButtons(); break;
     case Screen::Message: buildMessage(); break;
     case Screen::ConfirmDelete: buildConfirmDelete(); break;
+    case Screen::BrandSearch: buildBrandSearch(); break;
+    case Screen::CodeSearch: buildCodeSearch(); break;
+    case Screen::CodeConfirm: buildCodeConfirm(); break;
     }
 }
 
@@ -246,7 +263,8 @@ void App::listNav(const KeyEvent& e, int count)
 void App::buildHome()
 {
     titleBar("Beamhound", hwError_.empty() ? "IR ready" : "IR error");
-    std::vector<std::string> items{LV_SYMBOL_EYE_OPEN "  Sniff out a remote"};
+    std::vector<std::string> items{LV_SYMBOL_EYE_OPEN "  Sniff out a remote",
+                                   LV_SYMBOL_LIST "  No remote? Search by brand"};
     for (const auto& p : profiles_) items.push_back(LV_SYMBOL_SETTINGS "  " + p.name);
     sel_ = std::clamp(sel_, 0, static_cast<int>(items.size()) - 1);
     list(items, kTitleH + 4, 110, false);
@@ -415,7 +433,7 @@ void App::buildMessage()
 void App::buildConfirmDelete()
 {
     titleBar("Delete remote?", "");
-    const int idx = sel_ - 1;
+    const int idx = sel_ - kHomeActions;
     const std::string name = idx >= 0 && idx < static_cast<int>(profiles_.size()) ? profiles_[idx].name : "";
     text(root_, "Remove \"" + name + "\" from saved remotes?", &lv_font_montserrat_14, kText, 10, 40, kW - 20,
          LV_TEXT_ALIGN_LEFT, LV_LABEL_LONG_MODE_WRAP);
@@ -475,6 +493,11 @@ void App::buildSetup()
 // ------------------------------------------------------------------ flow
 void App::nextQuestion()
 {
+    if (codeSearchPending_) {  // the category question before code search was answered
+        codeSearchPending_ = false;
+        startCodeSearch();
+        return;
+    }
     if (matcher_.done() || matcher_.remoteCount() <= 1) {
         finishMatch();
         return;
@@ -600,7 +623,7 @@ void App::onKey(const KeyEvent& e)
         return;
     }
     case Screen::Home: {
-        const int count = 1 + static_cast<int>(profiles_.size());
+        const int count = kHomeActions + static_cast<int>(profiles_.size());
         if (e.key == Key::Esc) return;  // hold Esc to exit
         if (e.key == Key::Char && e.ch >= '1' && e.ch <= '9' && e.ch - '1' < count) {
             sel_ = e.ch - '1';
@@ -610,12 +633,19 @@ void App::onKey(const KeyEvent& e)
             if (sel_ == 0) {
                 status_.clear();
                 show(Screen::Listen);
+            } else if (sel_ == 1) {
+                if (!indexOk_) return;
+                brandFilter_.clear();
+                refreshBrandMatches();
+                sel_ = 0;
+                status_.clear();
+                show(Screen::BrandSearch);
             } else {
-                openProfile(profiles_[sel_ - 1]);
+                openProfile(profiles_[sel_ - kHomeActions]);
             }
             return;
         }
-        if (e.key == Key::Char && e.ch == 'd' && sel_ > 0) {
+        if (e.key == Key::Char && e.ch == 'd' && sel_ >= kHomeActions) {
             show(Screen::ConfirmDelete);
             return;
         }
@@ -623,8 +653,8 @@ void App::onKey(const KeyEvent& e)
         return;
     }
     case Screen::ConfirmDelete:
-        if (e.key == Key::Char && e.ch == 'y' && sel_ > 0) {
-            profiles_.erase(profiles_.begin() + (sel_ - 1));
+        if (e.key == Key::Char && e.ch == 'y' && sel_ >= kHomeActions) {
+            profiles_.erase(profiles_.begin() + (sel_ - kHomeActions));
             saveProfiles();
             sel_ = 0;
         }
@@ -642,20 +672,26 @@ void App::onKey(const KeyEvent& e)
         return;
     case Screen::Question: {
         if (e.key == Key::Esc) {
+            codeSearchPending_ = false;
             show(Screen::Home);
             return;
         }
         if (e.key == Key::Backspace) {
-            if (matcher_.undo()) {
+            if (codeSearchPending_) {  // category question of code search: back to the brand list
+                codeSearchPending_ = false;
+                status_.clear();
+                show(Screen::BrandSearch);
+            } else if (matcher_.undo()) {
                 status_ = "Undone.";
-                nextQuestion();
+                if (matcher_.noRemote() && matcher_.questionsAsked() < codeSearchDepth_) show(Screen::CodeSearch);
+                else nextQuestion();
             } else {
                 status_.clear();
-                show(Screen::Listen);
+                show(matcher_.noRemote() ? Screen::BrandSearch : Screen::Listen);
             }
             return;
         }
-        if (e.key == Key::Char && e.ch == 'b') {
+        if (e.key == Key::Char && e.ch == 'b' && !codeSearchPending_) {
             finishMatch();
             return;
         }
@@ -851,6 +887,96 @@ void App::onKey(const KeyEvent& e)
             }
         return;
     }
+    case Screen::BrandSearch: {
+        const int count = static_cast<int>(brandMatches_.size());
+        if (e.key == Key::Esc) {
+            sel_ = 1;
+            show(Screen::Home);
+        } else if (e.key == Key::Enter) {
+            if (sel_ < count) pickBrand(brandMatches_[sel_]);
+        } else if (e.key == Key::Backspace || e.key == Key::Char || e.key == Key::Space) {
+            if (e.key == Key::Backspace) {
+                if (brandFilter_.empty()) return;
+                brandFilter_.pop_back();
+            } else if (e.key == Key::Space) {
+                if (brandFilter_.empty() || brandFilter_.back() == ' ') return;
+                brandFilter_ += ' ';
+            } else if (brandFilter_.size() < 24) {
+                brandFilter_ += e.ch;
+            }
+            refreshBrandMatches();
+            sel_ = 0;
+            render();
+        } else if (e.key == Key::Up || e.key == Key::Down) {
+            listNav(e, count);
+        }
+        return;
+    }
+    case Screen::CodeSearch: {
+        const int n = static_cast<int>(codes_.size());
+        if (e.key == Key::Esc) {
+            status_.clear();
+            show(Screen::BrandSearch);
+            return;
+        }
+        if (e.key == Key::Space) {
+            if (e.repeat) return;  // holding Space must not fire a burst of codes
+            if (offNotice_ || codesExhausted_) {
+                tryCode(codesExhausted_ ? 0 : codePos_ + 1);
+                return;
+            }
+            const int next = codePos_ + 1;
+            if (next >= n) {
+                codesExhausted_ = true;
+                render();
+                return;
+            }
+            // Power On codes only work on a device that is off: say so before the first one.
+            if (codes_[next].btn == Btn::PowerOn && (codePos_ < 0 || codes_[codePos_].btn != Btn::PowerOn)) {
+                offNotice_ = true;
+                render();
+                return;
+            }
+            tryCode(next);
+            return;
+        }
+        const bool prev = e.key == Key::Left || (e.key == Key::Char && e.ch == 'z');
+        const bool fwd = e.key == Key::Right || (e.key == Key::Char && e.ch == 'c');
+        if (prev && codePos_ > 0) tryCode(codePos_ - 1);
+        if (fwd && codePos_ + 1 < n) tryCode(codePos_ + 1);
+        if (e.key == Key::Char && e.ch == 'r' && codePos_ >= 0 && !e.repeat) tryCode(codePos_);
+        if (e.key == Key::Enter && codePos_ >= 0 && !e.repeat) {
+            confirmSent_ = false;  // check by sending it again: did the device really react to this one?
+            show(Screen::CodeConfirm);
+        }
+        return;
+    }
+    case Screen::CodeConfirm: {
+        if (e.key == Key::Esc) {
+            show(Screen::CodeSearch);
+        } else if (e.key == Key::Enter && !e.repeat) {
+            if (sendPowerCode(codes_[codePos_])) {
+                confirmSent_ = true;
+                render();
+            }
+        } else if (e.key == Key::Char && e.ch == 'y') {
+            matcher_.answerPowerCode(codes_[codePos_]);
+            codeSearchDepth_ = matcher_.questionsAsked();
+            status_.clear();
+            nextQuestion();
+        } else if (e.key == Key::Char && e.ch == 'n') {
+            if (codePos_ > 0) {
+                // Devices react late; the previous code is the likely one.
+                --codePos_;
+                confirmSent_ = false;
+                render();
+            } else {
+                show(Screen::CodeSearch);
+                flash("Keep going with Space.");
+            }
+        }
+        return;
+    }
     case Screen::AllButtons: {
         if (e.key == Key::Esc) {
             status_.clear();
@@ -865,6 +991,198 @@ void App::onKey(const KeyEvent& e)
         return;
     }
     }
+}
+
+// ------------------------------------------------------------------ code search (no remote)
+void App::refreshBrandMatches()
+{
+    std::unordered_map<uint32_t, int> count;
+    for (const auto& r : ix_.remotes) ++count[r.brand];
+    const std::string f = searchKey(brandFilter_);
+    // Prefix matches first, then substring matches; most remotes first within each.
+    std::vector<std::tuple<int, int, std::string, uint32_t>> hits;
+    for (auto& [b, n] : count) {
+        const std::string k = searchKey(ix_.str(b));
+        const size_t at = f.empty() ? 0 : k.find(f);
+        if (at == std::string::npos) continue;
+        hits.emplace_back(at == 0 ? 0 : 1, -n, ix_.str(b), b);
+    }
+    std::sort(hits.begin(), hits.end());
+    brandMatches_.clear();
+    for (auto& h : hits) brandMatches_.push_back(std::get<3>(h));
+}
+
+void App::pickBrand(uint32_t brand)
+{
+    matcher_.startBrand(brand);
+    status_.clear();
+    const Question cq = matcher_.categoryQuestion();
+    if (cq.kind == Question::Kind::Category) {
+        q_ = cq;
+        codeSearchPending_ = true;
+        testSent_ = false;
+        sel_ = 0;
+        show(Screen::Question);
+        return;
+    }
+    startCodeSearch();
+}
+
+void App::startCodeSearch()
+{
+    codes_ = matcher_.powerCodes();
+    codePos_ = -1;
+    offNotice_ = false;
+    codesExhausted_ = false;
+    codeSearchDepth_ = matcher_.questionsAsked() + 1;
+    if (codes_.empty()) {
+        msgTitle_ = "Nothing to try";
+        msgBody_ = "None of these remotes has a power code I can send. Try another brand, or \"Not sure\" "
+                   "for the device type.";
+        messageReturn_ = Screen::BrandSearch;
+        show(Screen::Message);
+        return;
+    }
+    status_.clear();
+    show(Screen::CodeSearch);
+}
+
+void App::tryCode(int pos)
+{
+    codePos_ = pos;
+    offNotice_ = false;
+    codesExhausted_ = false;
+    status_.clear();
+    sendPowerCode(codes_[pos]);
+    render();
+}
+
+bool App::sendPowerCode(const PowerCode& c)
+{
+    const auto buttons = loadIrFile(dataDir_ + "/irdb/" + ix_.str(ix_.remotes[c.remote].path));
+    const IrButton* pick = nullptr;
+    double best = -1;
+    for (const auto& b : buttons) {
+        if (classifyButton(b.name) != c.btn) continue;
+        if (c.key) {
+            if (buttonKey(b) == c.key) {
+                pick = &b;
+                break;
+            }
+        } else if (!b.parsed && c.raw >= 0) {
+            const RawSig& rs = ix_.rawSigs[c.raw];
+            const double sim = rawSimilarity(ix_.rawData.data() + rs.offset, rs.len, b.raw.timings);
+            if (sim > best) {
+                best = sim;
+                pick = &b;
+            }
+        }
+    }
+    if (!pick) {
+        flash("Couldn't find that signal to send.");
+        return false;
+    }
+    std::string err;
+    rx_.mute(500);
+    if (!tx_.send(buttonTimings(*pick), err)) {
+        flash(err);
+        return false;
+    }
+    return true;
+}
+
+void App::buildBrandSearch()
+{
+    titleBar("Search by brand", std::to_string(brandMatches_.size()) + " brands");
+    lv_obj_t* in = box(root_, 4, kTitleH + 4, kW - 8, 22, kCard, 4);
+    lv_obj_set_style_border_color(in, kAmber, 0);
+    lv_obj_set_style_border_width(in, 1, 0);
+    text(in, brandFilter_.empty() ? "Type the brand name..." : brandFilter_ + "_", &lv_font_montserrat_14,
+         brandFilter_.empty() ? kDim : kText, 6, 3, kW - 20);
+    if (brandMatches_.empty()) {
+        text(root_, "No brand matches \"" + brandFilter_ + "\".", &lv_font_montserrat_12, kDim, 10, 60, kW - 20);
+    } else {
+        std::vector<std::string> items;
+        for (uint32_t b : brandMatches_) items.push_back(ix_.str(b));
+        sel_ = std::clamp(sel_, 0, static_cast<int>(items.size()) - 1);
+        list(items, kTitleH + 30, 98, false);
+    }
+    footer("Type to search  Fn+F/X move  Enter pick  Esc back");
+}
+
+void App::buildCodeSearch()
+{
+    const int n = static_cast<int>(codes_.size());
+    const uint32_t brand = matcher_.candidates().empty() ? 0 : ix_.remotes[matcher_.candidates().front()].brand;
+    char right[48];
+    std::snprintf(right, sizeof right, "%d power codes", n);
+    titleBar("Code search: " + ix_.str(brand), right);
+    const int x = 10, w = kW - 20, top = kTitleH + 6;
+    if (offNotice_) {
+        int left = n - codePos_ - 1;
+        text(root_, "Now turn the device OFF", &lv_font_montserrat_16, kAmber, x, top + 4, w);
+        text(root_, "The last " + std::to_string(left) + " codes only switch a device on. Press Space to continue; "
+                    "watch for it turning on.",
+             &lv_font_montserrat_12, kDim, x, top + 30, w, LV_TEXT_ALIGN_LEFT, LV_LABEL_LONG_MODE_WRAP);
+    } else if (codesExhausted_) {
+        text(root_, "That was the last code", &lv_font_montserrat_16, kAmber, x, top + 4, w);
+        text(root_, "Enter if the last one worked, Space to start again from code 1, Esc to pick another brand.",
+             &lv_font_montserrat_12, kDim, x, top + 30, w, LV_TEXT_ALIGN_LEFT, LV_LABEL_LONG_MODE_WRAP);
+    } else if (codePos_ < 0) {
+        const bool onFirst = codes_.front().btn != Btn::PowerOn;
+        text(root_, onFirst ? "Turn the device ON and point me at it" : "Turn the device OFF and point me at it",
+             &lv_font_montserrat_14, kText, x, top + 4, w);
+        text(root_, "Space sends the next power code. Keep pressing until the device switches " +
+                        std::string(onFirst ? "off" : "on") + ", then press Enter.",
+             &lv_font_montserrat_12, kDim, x, top + 26, w, LV_TEXT_ALIGN_LEFT, LV_LABEL_LONG_MODE_WRAP);
+    } else {
+        const PowerCode& c = codes_[codePos_];
+        char big[32];
+        std::snprintf(big, sizeof big, "%d / %d", codePos_ + 1, n);
+        text(root_, "Sent code", &lv_font_montserrat_12, kDim, x, top);
+        text(root_, big, &lv_font_montserrat_24, kAmber, x, top + 14, 150);
+        text(root_, upperLabel(c.btn), &lv_font_montserrat_14, kCyan, 170, top + 22, 140);
+        char used[48];
+        std::snprintf(used, sizeof used, "used by %u remote%s", c.weight, c.weight == 1 ? "" : "s");
+        text(root_, used, &lv_font_montserrat_10, kDim, 170, top + 6, 140);
+        text(root_, std::string("Did the device switch ") + (c.btn == Btn::PowerOn ? "on" : "off") +
+                        "? Enter = yes, Space = next code.",
+             &lv_font_montserrat_12, kText, x, top + 50, w, LV_TEXT_ALIGN_LEFT, LV_LABEL_LONG_MODE_WRAP);
+    }
+    // Progress through the list.
+    lv_obj_t* track = box(root_, x, 118, w, 6, kCard, 3);
+    if (codePos_ >= 0) box(track, 0, 0, std::max(6, w * (codePos_ + 1) / std::max(1, n)), 6, kAmber, 3);
+    statusLabel_ = text(root_, status_, &lv_font_montserrat_10, kPink, 6, kH - kFooterH - 14, kW - 12);
+    footer("Spc next  Z/C prev/next  R resend  Enter it worked  Esc back");
+}
+
+void App::buildCodeConfirm()
+{
+    char right[48];
+    std::snprintf(right, sizeof right, "code %d / %zu", codePos_ + 1, codes_.size());
+    titleBar("Double-check", right);
+    const int x = 10, w = kW - 20, top = kTitleH + 8;
+    const Btn b = codes_[codePos_].btn;
+    const std::string num = std::to_string(codePos_ + 1);
+    if (!confirmSent_) {
+        // A toggle code switches the device back; a discrete one needs it put back by hand first.
+        std::string how = b == Btn::Power      ? "Press Enter to send code " + num + " again. It should switch the device back."
+                          : b == Btn::PowerOff ? "Turn the device back ON by hand, then press Enter to send code " + num + " again."
+                                               : "Turn the device back OFF by hand, then press Enter to send code " + num + " again.";
+        text(root_, "Let's make sure", &lv_font_montserrat_16, kText, x, top, w);
+        text(root_, how, &lv_font_montserrat_12, kDim, x, top + 26, w, LV_TEXT_ALIGN_LEFT, LV_LABEL_LONG_MODE_WRAP);
+        text(root_, "Y  I'm sure, it's this one", &lv_font_montserrat_12, kAmber, x, top + 80, w);
+    } else {
+        text(root_, "Sent code " + num + " again.", &lv_font_montserrat_14, kDim, x, top, w);
+        text(root_, "Did the device react?", &lv_font_montserrat_16, kText, x, top + 22, w);
+        text(root_, "Y  yes, that's it", &lv_font_montserrat_12, kAmber, x, top + 54, w);
+        text(root_, codePos_ > 0 ? "N  no: try code " + std::to_string(codePos_) + " (devices react late)"
+                                 : std::string("N  no: keep searching"),
+             &lv_font_montserrat_12, kAmber, x, top + 72, w);
+        text(root_, "Enter  send it again", &lv_font_montserrat_12, kAmber, x, top + 90, w);
+    }
+    statusLabel_ = text(root_, status_, &lv_font_montserrat_10, kGreen, 6, kH - kFooterH - 14, kW - 12);
+    footer("Esc back to code search");
 }
 
 // ------------------------------------------------------------------ profiles

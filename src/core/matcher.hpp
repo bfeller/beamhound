@@ -21,6 +21,15 @@ struct Question {
     std::vector<uint32_t> values;   // Category: Group ids; Brand: brand string ids; PickRemote: remote ids
 };
 
+// One distinct power signal to try in code search (no original remote).
+struct PowerCode {
+    Btn btn = Btn::Power;   // Power, PowerOff or PowerOn
+    uint64_t key = 0;       // canonical key; 0 for a raw-only signal
+    int raw = -1;           // index into Index::rawSigs when key == 0
+    uint32_t remote = 0;    // a remote whose file holds this signal
+    uint32_t weight = 0;    // candidate remotes using it (more = tried earlier)
+};
+
 class Matcher {
 public:
     explicit Matcher(const Index& ix) : ix_(ix) {}
@@ -28,6 +37,19 @@ public:
     enum class StartResult { Matched, NotDecoded, NoMatch };
     // Begin with a captured power-button signal.
     StartResult start(const std::vector<uint32_t>& timings);
+
+    // Begin without the original remote: every remote of `brand` is a candidate.
+    // In this mode next() never asks the user to press a button on their remote.
+    void startBrand(uint32_t brand);
+    bool noRemote() const { return noRemote_; }
+    // Category question for the current candidates (Kind::None when they don't span 2+ categories).
+    Question categoryQuestion() const;
+    // Distinct power signals of the candidates, most common first. Toggle Power and Power Off
+    // come first (the user is told to start with the device on), then a second pass of
+    // Power On codes (btn == PowerOn, device off) for remotes that have nothing else.
+    std::vector<PowerCode> powerCodes() const;
+    // The device reacted to `c`: keep the remotes that use that signal for power.
+    void answerPowerCode(const PowerCode& c);
 
     std::optional<IrCode> heard() const { return heard_; }
     bool fuzzy() const { return fuzzy_; }
@@ -65,6 +87,7 @@ private:
         std::set<uint64_t> tested;
     };
     void push();
+    void reset();
     void setCandidates(std::vector<uint32_t> next);
     uint32_t richness(uint32_t remote) const;
 
@@ -75,6 +98,7 @@ private:
     std::vector<State> history_;
     std::optional<IrCode> heard_;
     bool fuzzy_ = false;
+    bool noRemote_ = false;
 };
 
 }  // namespace bh
