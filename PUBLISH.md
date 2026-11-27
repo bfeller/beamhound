@@ -4,9 +4,9 @@ Portal: <https://dev.cardputer.cc/#/upload>
 
 ## Package
 
-- Debian package path: `build/pkg/beamhound_0.1.0_arm64.deb` (built with `make package`)
+- Debian package: `beamhound_<version>_arm64.deb` from the GitHub Release of the version tag (built by CI)
 - Package: `beamhound`
-- Version: `0.1.0`
+- Current version: `0.2.0`
 - Architecture: `arm64`
 - Maintainer: `Bryan Feller <6282600+bfeller@users.noreply.github.com>`
 - APPLaunch desktop path: `/usr/share/APPLaunch/applications/beamhound.desktop`
@@ -37,6 +37,7 @@ Portal: <https://dev.cardputer.cc/#/upload>
 - Screenshot 2 (320 x 170): `store/screenshots/2-questions.png`
 - Screenshot 3 (320 x 170): `store/screenshots/3-found.png`
 - Screenshot 4 (320 x 170): `store/screenshots/4-remote.png`
+- Screenshot 5 (320 x 170): `store/screenshots/5-code-search.png`
 
 ## Preflight
 
@@ -57,7 +58,9 @@ Portal: <https://dev.cardputer.cc/#/upload>
   `d126fb1b6f1e114c52b4a8c19839ea65e3a9c24d` on first run (about 17 MB; about 1 minute
   including indexing on the device).
 
-## Submission Result
+## Submission Results
+
+### 0.1.0
 
 - Status: `submitted, awaiting maintainer review` (first release requires a demo video in the PR)
 - Submitted at: 2026-11-23T01:36:08Z
@@ -66,3 +69,11 @@ Portal: <https://dev.cardputer.cc/#/upload>
 - Package SHA-256: `a436b61801e113347bf00cf0acf218bf39bc2909cda11b57e5e440c2a14ce993` (matches local build)
 - Actions URL: https://github.com/CardputerZero/packages/actions/runs/45095456623
 - Tracking or pull-request URL: https://github.com/CardputerZero/packages/pull/685
+
+### 0.2.0 (brand code search for users without the original remote)
+
+- Status: `merged` (updates merge automatically once the store checks pass)
+- Submitted and merged at: 2026-11-27T03:11Z
+- Package SHA-256: `d5bccfec8e20edfe5ca454200d364806e51f15cea82394103c415816f9931f16` (the GitHub Release asset)
+- Actions URL: https://github.com/CardputerZero/packages/actions/runs/45932666829
+- Pull-request URL: https://github.com/CardputerZero/packages/pull/936
