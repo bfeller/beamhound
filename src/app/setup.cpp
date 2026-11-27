@@ -75,8 +75,44 @@ void DbSetup::start(const std::string& dataDir)
     }
     done_ = 0;
     total_ = 0;
+    reindexing_ = false;
     phase_ = Phase::Downloading;
     worker_ = std::thread(&DbSetup::run, this, dataDir);
+}
+
+void DbSetup::reindex(const std::string& dataDir)
+{
+    if (phase_ == Phase::Downloading || phase_ == Phase::Extracting || phase_ == Phase::Indexing) return;
+    if (worker_.joinable()) worker_.join();
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        error_.clear();
+    }
+    done_ = 0;
+    total_ = 0;
+    reindexing_ = true;
+    phase_ = Phase::Indexing;
+    worker_ = std::thread(&DbSetup::runReindex, this, dataDir);
+}
+
+void DbSetup::runReindex(std::string dataDir)
+{
+    const fs::path base = dataDir, tmp = base / "index.bin.new";
+    Index ix;
+    BuildReport rep;
+    const bool ok = buildIndex((base / "irdb").string(), ix, rep, [&](size_t d, size_t t) {
+        done_ = d;
+        total_ = t;
+    });
+    if (!ok) return fail("Indexing failed: " + rep.error);
+    std::error_code ec;
+    if (!ix.save(tmp.string())) {
+        fs::remove(tmp, ec);
+        return fail("Couldn't write the index.");
+    }
+    fs::rename(tmp, base / "index.bin", ec);  // atomic: the old index stays valid until here
+    if (ec) return fail("Couldn't install the index: " + ec.message());
+    phase_ = Phase::Done;
 }
 
 void DbSetup::run(std::string dataDir)

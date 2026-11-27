@@ -43,6 +43,7 @@ struct Index {
     std::vector<RawSig> rawSigs;
     std::vector<uint16_t> rawData; // microseconds, capped at 65535
     uint32_t codesetCount = 0;
+    uint32_t builderRev = 0;  // kBuilderRev of the builder that made it (0 = before revisions)
 
     // Built on load: per-remote slices of sigs (sorted by remote).
     std::vector<Sig> byRemote;

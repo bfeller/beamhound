@@ -1,5 +1,7 @@
 #include "app/app.hpp"
 
+#include "core/builder.hpp"
+
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
@@ -142,6 +144,14 @@ void App::init()
             }
         },
         300, this);
+    // An app update whose builder makes a different index: rebuild it from the database already
+    // on the device (no download). Without the database files, keep using the old index.
+    std::error_code ec;
+    if (indexOk_ && ix_.builderRev < kBuilderRev && std::filesystem::is_directory(dataDir_ + "/irdb", ec)) {
+        setup_.reindex(dataDir_);
+        show(Screen::Setup);
+        return;
+    }
     show(indexOk_ ? Screen::Home : Screen::Setup);
 }
 
@@ -153,10 +163,17 @@ void App::tick()
             indexOk_ = ix_.load(dataDir_ + "/index.bin", indexError_);
             if (indexOk_) {
                 sel_ = 0;
+                flash(setup_.reindexing() ? "Database updated" : "Database ready");
                 show(Screen::Home);
-                flash("Database ready");
                 return;
             }
+        }
+        if (ph == DbSetup::Phase::Failed && setup_.reindexing() && indexOk_) {
+            // The old index is still loaded and on disk: carry on with it, retry next launch.
+            sel_ = 0;
+            flash("Database update failed; using the old one");
+            show(Screen::Home);
+            return;
         }
         if (ph != setupShown_ || nowMs() - setupRefreshMs_ > 400) {
             setupShown_ = ph;
@@ -268,7 +285,9 @@ void App::buildHome()
     for (const auto& p : profiles_) items.push_back(LV_SYMBOL_SETTINGS "  " + p.name);
     sel_ = std::clamp(sel_, 0, static_cast<int>(items.size()) - 1);
     list(items, kTitleH + 4, 110, false);
-    if (!indexOk_) {
+    if (statusUntil_ && !status_.empty()) {
+        statusLabel_ = text(root_, status_, &lv_font_montserrat_10, kGreen, 6, 134, kW - 12);
+    } else if (!indexOk_) {
         text(root_, "Database missing: " + indexError_, &lv_font_montserrat_10, kPink, 6, 134, kW - 12);
     } else if (!hwError_.empty()) {
         text(root_, hwError_, &lv_font_montserrat_10, kPink, 6, 134, kW - 12);
@@ -443,7 +462,7 @@ void App::buildConfirmDelete()
 
 void App::buildSetup()
 {
-    titleBar("First-time setup", "");
+    titleBar(setup_.reindexing() ? "Updating database" : "First-time setup", "");
     const auto ph = setup_.phase();
     const int x = 10, w = kW - 20;
     switch (ph) {
@@ -473,6 +492,14 @@ void App::buildSetup()
     } else if (ph == DbSetup::Phase::Extracting) {
         headline = "Unpacking...";
         detail = "This takes a minute on the Cardputer.";
+    } else if (setup_.reindexing()) {
+        headline = "Re-indexing remotes...";
+        const size_t t = setup_.total(), d = setup_.done();
+        char b[64];
+        if (t) std::snprintf(b, sizeof b, "Applying this version's improvements: %zu / %zu", d, t);
+        else std::snprintf(b, sizeof b, "Finding the database files...");
+        detail = b;
+        if (t) pct = static_cast<int>(d * 100 / t);
     } else {
         headline = "Indexing remotes...";
         const size_t t = setup_.total(), d = setup_.done();

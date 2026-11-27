@@ -10,7 +10,7 @@ namespace bh {
 namespace {
 
 constexpr char kMagic[4] = {'B', 'H', 'I', 'X'};
-constexpr uint32_t kVersion = 1;
+constexpr uint32_t kVersion = 2;  // 2: adds builderRev after the version (1 still loads, as rev 0)
 
 template <typename T>
 void put(std::ofstream& f, const T& v)
@@ -51,6 +51,7 @@ bool Index::save(const std::string& path) const
     if (!f) return false;
     f.write(kMagic, 4);
     put(f, kVersion);
+    put(f, builderRev);
     put(f, static_cast<uint32_t>(strings.size()));
     put(f, static_cast<uint32_t>(remotes.size()));
     put(f, static_cast<uint32_t>(sigs.size()));
@@ -98,10 +99,12 @@ bool Index::load(const std::string& path, std::string& error)
     }
     uint32_t ver, ns, nr, nsig, nraw, nrawdata;
     get(buf, pos, ver);
-    if (ver != kVersion) {
+    if (ver != 1 && ver != kVersion) {
         error = "index version mismatch";
         return false;
     }
+    builderRev = 0;
+    if (ver >= 2) get(buf, pos, builderRev);
     get(buf, pos, ns);
     get(buf, pos, nr);
     get(buf, pos, nsig);

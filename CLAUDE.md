@@ -36,6 +36,8 @@ as package `beamhound` (share code BEAM). Release process: `docs/RELEASING.md`.
 - IR codes must never be bundled in the repo or the package (licensing): the app downloads
   Flipper-IRDB commit `kIrdbCommit` on first run. Keep it in sync with `IRDB_COMMIT` in CI.
 - Data dir on device: `~/.local/share/beamhound/` (`index.bin`, `irdb/`, `profiles.tsv`).
+- Any change to what the builder outputs must bump `kBuilderRev` (`src/core/builder.hpp`) so
+  installed apps re-index from their local `irdb/` (`--update-test <dir>` checks that path).
 - Keyboard: F/Z/X/C are the printed arrow keys (up/left/down/right) and work without Fn in
   lists and on the remote screen. Fn layer sends KEY_UP/LEFT/DOWN/RIGHT, KEY_MUTE/VOLUME*,
   KEY_PLAYPAUSE/PREVIOUSSONG/NEXTSONG, KEY_BRIGHTNESS*. Short Esc = back, long Esc = exit.

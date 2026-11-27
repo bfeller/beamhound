@@ -13,6 +13,7 @@
 #include <thread>
 
 #include "app/app.hpp"
+#include "core/builder.hpp"
 #include "lvgl.h"
 
 using namespace bh;
@@ -139,8 +140,31 @@ int main(int argc, char** argv)
         std::printf("remotes loaded: %zu\n", app.index().remotes.size());
         return app.index().remotes.empty() ? 1 : 0;
     }
+    if (argc >= 3 && std::strcmp(argv[1], "--update-test") == 0) {
+        // App update over an index from an older builder: it must rebuild from <data>/irdb.
+        const std::string out = argv[2];
+        lv_init();
+        lv_tick_set_cb(tickMs);
+        lv_display_t* disp = lv_display_create(320, 170);
+        static uint16_t buf[320 * 170];
+        lv_display_set_buffers(disp, buf, nullptr, sizeof buf, LV_DISPLAY_RENDER_MODE_PARTIAL);
+        lv_display_set_flush_cb(disp, flushCb);
+        App app(dataDir(), profileDir());
+        app.init();
+        std::printf("index builder rev at start: %u\n", app.index().builderRev);
+        int n = 0;
+        for (int i = 0; i < 1200 && app.index().builderRev < kBuilderRev; ++i) {
+            pump(app, 100);
+            if (i % 10 == 0) shot(disp, out + "/update-" + std::to_string(n++) + ".ppm");
+        }
+        pump(app, 200);
+        shot(disp, out + "/update-done.ppm");
+        std::printf("index builder rev now: %u (want %u)\n", app.index().builderRev, kBuilderRev);
+        return app.index().builderRev == kBuilderRev ? 0 : 1;
+    }
+
     if (argc < 3 || std::strcmp(argv[1], "--demo") != 0) {
-        std::fprintf(stderr, "usage: %s --demo <outdir> [remote-path-substring] | --setup-test <outdir>\n", argv[0]);
+        std::fprintf(stderr, "usage: %s --demo <outdir> [remote-path-substring] | --setup-test <outdir> | --update-test <outdir>\n", argv[0]);
         return 2;
     }
     const std::string out = argv[2];

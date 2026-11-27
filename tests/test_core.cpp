@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "core/builder.hpp"
 #include "core/ir.hpp"
 #include "core/irfile.hpp"
 
@@ -150,6 +151,46 @@ static void dbConsistency(const std::string& root)
         std::printf("  %-10s %8d %8d %5.1f%%\n", p.c_str(), s.decoded, s.overlap, 100.0 * s.overlap / s.decoded);
 }
 
+// Brand folders that wrap a brand ("TV SAMSUNG", "Pinnacle_Systems") fold into it; distinct
+// companies sharing a first word ("Dream Multimedia" vs "Dream Vision") stay apart.
+static void testBrandAliases()
+{
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / ("bh_brands_" + std::to_string(std::random_device{}()));
+    const std::vector<std::string> files = {
+        "TVs/Samsung/A.ir",
+        "_Converted_/IR_Plus/T/TV SAMSUNG/B.ir",
+        "_Converted_/CSV/P/Pinnacle_Systems/Box/C.ir",
+        "_Converted_/CSV/P/PINNACLE/Box/D.ir",
+        "_Converted_/CSV/D/Dream/Box/E.ir",
+        "_Converted_/CSV/D/Dream_Multimedia/Box/F.ir",
+        "_Converted_/CSV/D/Dream_Vision/Projector/G.ir",
+    };
+    int cmd = 1;
+    for (const auto& f : files) {
+        fs::create_directories((root / f).parent_path());
+        std::FILE* out = std::fopen((root / f).string().c_str(), "w");
+        if (!out) { CHECK(false, "cannot write %s", f.c_str()); return; }
+        std::fprintf(out, "Filetype: IR signals file\nVersion: 1\n#\nname: Power\ntype: parsed\nprotocol: NEC\n"
+                          "address: 04 00 00 00\ncommand: %02X 00 00 00\n", cmd++);
+        std::fclose(out);
+    }
+    bh::Index ix;
+    bh::BuildReport rep;
+    const bool ok = bh::buildIndex(root.string(), ix, rep);
+    fs::remove_all(root);
+    CHECK(ok && ix.remotes.size() == files.size(), "brand test index: %zu remotes", ix.remotes.size());
+    if (!ok) return;
+    std::map<std::string, std::string> brandOf;  // file name -> brand
+    for (const auto& r : ix.remotes) brandOf[fs::path(ix.str(r.path)).stem().string()] = ix.str(r.brand);
+    CHECK(brandOf["A"] == "Samsung" && brandOf["B"] == "Samsung", "TV SAMSUNG -> %s", brandOf["B"].c_str());
+    CHECK(brandOf["C"] == "Pinnacle" && brandOf["D"] == "Pinnacle", "Pinnacle Systems -> %s, PINNACLE -> %s",
+          brandOf["C"].c_str(), brandOf["D"].c_str());
+    CHECK(brandOf["E"] == "Dream" && brandOf["F"] == "Dream Multimedia" && brandOf["G"] == "Dream Vision",
+          "Dream brands: %s / %s / %s", brandOf["E"].c_str(), brandOf["F"].c_str(), brandOf["G"].c_str());
+    CHECK(rep.brandsMerged == 2, "brandsMerged = %d", rep.brandsMerged);
+}
+
 int main(int argc, char** argv)
 {
     std::printf("round trips (clean + distorted):\n");
@@ -157,6 +198,7 @@ int main(int argc, char** argv)
     testEquivalence();
     testClassify();
     testParse();
+    testBrandAliases();
     if (argc > 1) dbConsistency(argv[1]);
     std::printf(g_fail ? "\n%d FAILURES\n" : "\nALL TESTS PASSED\n", g_fail);
     return g_fail ? 1 : 0;

@@ -30,6 +30,40 @@ std::string brandKey(const std::string& s)
     return k;
 }
 
+// Folder names sometimes wrap a brand in a device word or a company suffix ("TV SAMSUNG",
+// "Dish Network", "InFocus Systems"). Returns the key of the bare brand when stripping those
+// words leaves a brand that exists on its own, else "". Distinct companies that merely share a
+// first word ("Dream Multimedia" vs "Dream Vision") are kept apart: only the listed words go.
+// `bare` receives the stripped spelling ("Pinnacle" from "Pinnacle_Systems").
+std::string aliasKey(const std::string& brand, const std::set<std::string>& keys, std::string& bare)
+{
+    static const std::set<std::string> lead = {"TV", "TVS", "VCR", "DVD"};
+    static const std::set<std::string> trail = {"TV", "AUDIO", "SYSTEMS", "NETWORK", "TECHNOLOGIES", "ELECTRONICS",
+                                                "INC", "CORP", "CORPORATION", "CO", "LTD", "GMBH"};
+    std::vector<std::string> words, spelled;
+    std::string w;
+    for (char c : brand + " ") {
+        if (std::isalnum(static_cast<unsigned char>(c))) {
+            w.push_back(c);
+        } else if (!w.empty()) {
+            spelled.push_back(w);
+            words.push_back(upper(w));
+            w.clear();
+        }
+    }
+    size_t b = 0, e = words.size();
+    while (b < e && lead.count(words[b])) ++b;
+    while (e > b && trail.count(words[e - 1])) --e;
+    if (b == e || (b == 0 && e == words.size())) return "";
+    std::string k;
+    bare.clear();
+    for (size_t i = b; i < e; ++i) {
+        k += words[i];
+        bare += (bare.empty() ? "" : " ") + spelled[i];
+    }
+    return keys.count(k) && k != brandKey(brand) ? k : "";
+}
+
 std::string pretty(std::string s)
 {
     std::replace(s.begin(), s.end(), '_', ' ');
@@ -92,6 +126,7 @@ struct Entry {
     Group group;
     std::string brand;
     std::string model;
+    std::string brandKey;  // after folding aliases
 };
 
 bool describePath(const std::string& rel, Entry& e)
@@ -222,7 +257,6 @@ bool buildIndex(const std::string& rootDir, Index& ix, BuildReport& rep,
         r.codeset = csIt->second;
         ix.remotes.push_back(r);
         entries.push_back(e);
-        spellings[brandKey(e.brand)][e.brand] += (rel.rfind("_Converted_", 0) == 0) ? 1 : 100;
         ++groupCounts[e.group];
 
         for (auto& [cls, key] : set) ix.sigs.push_back({key, rid, static_cast<Btn>(cls)});
@@ -245,9 +279,23 @@ bool buildIndex(const std::string& rootDir, Index& ix, BuildReport& rep,
         }
     }
 
-    // Resolve brand display names.
+    // Fold brand aliases, then resolve display names.
+    {
+        std::set<std::string> keys;
+        for (const auto& e : entries) keys.insert(brandKey(e.brand));
+        std::set<std::string> merged;
+        for (auto& e : entries) {
+            std::string bare;
+            const std::string a = aliasKey(e.brand, keys, bare);
+            e.brandKey = a.empty() ? brandKey(e.brand) : a;
+            if (!a.empty()) merged.insert(e.brand);
+            // An alias votes with its bare spelling ("Pinnacle"), never as "TV SAMSUNG".
+            spellings[e.brandKey][a.empty() ? e.brand : bare] += (e.rel.rfind("_Converted_", 0) == 0) ? 1 : 100;
+        }
+        rep.brandsMerged = static_cast<int>(merged.size());
+    }
     for (size_t i = 0; i < ix.remotes.size(); ++i) {
-        const auto& sp = spellings[brandKey(entries[i].brand)];
+        const auto& sp = spellings[entries[i].brandKey];
         std::string best;
         int bestScore = -1;
         for (auto& [s, n] : sp) {
@@ -255,6 +303,7 @@ bool buildIndex(const std::string& rootDir, Index& ix, BuildReport& rep,
             const int score = n * 2 + (mixed ? 1 : 0);
             if (score > bestScore) { bestScore = score; best = s; }
         }
+        if (best.empty()) best = entries[i].brand;  // alias of an alias: keep its own spelling
         ix.remotes[i].brand = intern(pretty(best));
     }
 
@@ -295,6 +344,7 @@ bool buildIndex(const std::string& rootDir, Index& ix, BuildReport& rep,
     }
 
     ix.codesetCount = static_cast<uint32_t>(codesets.size());
+    ix.builderRev = kBuilderRev;
     std::sort(ix.sigs.begin(), ix.sigs.end(),
               [](const Sig& a, const Sig& b) { return a.key != b.key ? a.key < b.key : a.remote < b.remote; });
     ix.buildDerived();

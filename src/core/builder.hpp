@@ -9,11 +9,17 @@
 
 namespace bh {
 
+// Revision of the builder's output. Bump it whenever a change to the builder alters the index
+// (brands, categories, signals): installed apps then rebuild their index from the database
+// already on the device. 1 = original, 2 = brand aliases folded ("TV SAMSUNG" -> Samsung).
+constexpr uint32_t kBuilderRev = 2;
+
 struct BuildReport {
     size_t files = 0;
     long powerDecoded = 0, powerRaw = 0;
     long skippedAc = 0, skippedUniversal = 0, skippedNoPower = 0, skippedPath = 0;
     int propagated = 0;
+    int brandsMerged = 0;  // brand spellings folded into another brand ("TV SAMSUNG" -> Samsung)
     std::map<Group, int> groups;
     std::string error;
 };

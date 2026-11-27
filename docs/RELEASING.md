@@ -56,3 +56,12 @@ The app downloads a pinned Flipper-IRDB commit on first run. To move to a newer 
 `kIrdbCommit` in `src/app/setup.hpp` **and** `IRDB_COMMIT` in the workflow, let CI confirm the
 tests still pass, and release. Existing installs keep their current database (setup only runs
 when no index exists).
+
+## Changing the index builder
+
+Installed apps build `index.bin` on the device, so a builder change (brand folding, categories,
+signal handling) would otherwise only reach new installs. Bump `kBuilderRev` in
+`src/core/builder.hpp` with any such change: on the next launch the app sees the older revision
+and rebuilds its index from the database already on the device (about a minute, no download;
+if that fails it keeps the old index and retries next launch). Check it with
+`BEAMHOUND_DATA=<copy of a data dir with an older index.bin> ./build/desktop/beamhound --update-test <dir>`.

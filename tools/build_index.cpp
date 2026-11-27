@@ -21,6 +21,7 @@ int main(int argc, char** argv)
         return 1;
     }
     std::printf("categories inferred from shared codes: %d\n", rep.propagated);
+    std::printf("brand spellings merged into another brand: %d\n", rep.brandsMerged);
     std::printf("remotes: %zu  codesets: %u  signals: %zu  raw power sigs: %zu  strings: %zu\n", ix.remotes.size(),
                 ix.codesetCount, ix.sigs.size(), ix.rawSigs.size(), ix.strings.size());
     std::printf("power decodable: %ld  power raw-only: %ld\n", rep.powerDecoded, rep.powerRaw);
