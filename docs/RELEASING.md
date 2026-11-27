@@ -1,8 +1,8 @@
 # Releasing Beamhound
 
-Releases are built by GitHub Actions from a version tag. Submitting to the CardputerZero
-Application Store is a short manual step (the store's developer portal signs in with your
-GitHub account in the browser, so no store credentials live in this repo).
+Releases are built by GitHub Actions from a version tag, which also submits them to the
+CardputerZero Application Store with the store's own `czdev publish` CLI. The only store
+credential is the `CZDEV_TOKEN` secret in the repository's protected `store` environment.
 
 ## What CI does
 
@@ -18,6 +18,13 @@ GitHub account in the browser, so no store credentials live in this repo).
 5. Runs the store's own `prepublish_check.py` against the package.
 6. Uploads the `.deb` as a workflow artifact.
 7. **On a tag only:** creates a GitHub Release named after the tag with the `.deb` attached.
+8. **On a tag only** (job `store`, environment `store`): runs `czdev publish` (CardputerZero/AppBuilder
+   at the pinned `CZDEV_COMMIT`) on that same `.deb`. czdev uploads it to a release on
+   `bfeller/packages` (the owner's fork of `CardputerZero/packages`) and opens the publish PR;
+   updates merge automatically once the store's checks pass. The job summary shows the PR link.
+   CI patches czdev to record the noreply address as the uploader email (the profile email is
+   public, and czdev would otherwise copy it into the public manifest); the job stops if a
+   newer czdev no longer matches that patch.
 
 ## Cutting a release
 
@@ -29,15 +36,21 @@ git tag v0.1.1
 git push && git push origin v0.1.1     # CI builds, tests and creates the GitHub Release
 ```
 
-Then publish to the store:
+CI then publishes to the store by itself. When the **build** workflow on the tag is green,
+take the PR link from the `store` job summary and record it (with the SHA-256) in `PUBLISH.md`.
 
-1. Wait for the **build** workflow on the tag to go green; open the new release on GitHub and
-   download `beamhound_0.1.1_arm64.deb`.
-2. Upload it at <https://dev.cardputer.cc/#/upload> (signed in as `bfeller`), source repository
-   `https://github.com/bfeller/beamhound`, keep "hide email" on.
-3. The portal opens a PR on `CardputerZero/packages`. After the first release (v0.1.0) was merged,
-   updates merge automatically once the store's checks pass.
-4. Record the result (PR link, SHA-256) in `PUBLISH.md` and commit it.
+Manual fallback (if the `store` job fails, e.g. an expired token): download the `.deb` from the
+GitHub Release and upload it at <https://dev.cardputer.cc/#/upload> (signed in as `bfeller`),
+source repository `https://github.com/bfeller/beamhound`, keep "hide email" on.
+
+### Store token (one-time setup, and on expiry)
+
+1. Create a **classic** personal access token as `bfeller` at
+   <https://github.com/settings/tokens/new> with only the `public_repo` scope and an expiry
+   (fine-grained tokens can't open PRs on another organisation's repository).
+2. Add it as secret `CZDEV_TOKEN` in Settings → Environments → `store` (not as a repository
+   secret). The environment only admits `v*` tags, so branch and pull-request builds can't
+   read it.
 
 The store rejects a version that is not newer than the published one, so always bump before
 tagging. If CI fails on a tag, fix the problem, delete the tag

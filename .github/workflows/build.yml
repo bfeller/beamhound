@@ -1,6 +1,6 @@
-# Build and test on every push/PR; on a version tag (vX.Y.Z) also build the
-# Application Store .deb and publish it as a GitHub Release.
-# Publishing to the store itself stays manual (developer portal); see docs/RELEASING.md.
+# Build and test on every push/PR. On a version tag (vX.Y.Z) also publish the Application
+# Store .deb as a GitHub Release, then submit it to the CardputerZero store with the store's
+# own `czdev publish` CLI (see docs/RELEASING.md).
 name: build
 
 on:
@@ -19,6 +19,8 @@ env:
   IRDB_COMMIT: d126fb1b6f1e114c52b4a8c19839ea65e3a9c24d
   # CardputerZero/skill: provides the store's prepublish_check.py.
   STORE_SKILL_COMMIT: 2a061c0908c40676837d7d40e40b23ac43a2f888
+  # CardputerZero/AppBuilder: provides the czdev CLI that submits to the store.
+  CZDEV_COMMIT: 042356c579d728d684eccb68ed9f8669a32822bc
 
 jobs:
   build:
@@ -102,9 +104,66 @@ jobs:
           Store package: \`$deb\`
           SHA-256: \`$sha\`
 
-          To publish: download the .deb below and upload it at https://dev.cardputer.cc/#/upload
-          (source repository: https://github.com/${GITHUB_REPOSITORY}). Updates to an already
-          published app merge automatically once the store's checks pass.
+          CI submits this exact file to the CardputerZero store (job "store"). Manual fallback:
+          upload it at https://dev.cardputer.cc/#/upload (source repository:
+          https://github.com/${GITHUB_REPOSITORY}).
           EOF
           gh release create "$GITHUB_REF_NAME" "$deb" --title "Beamhound $GITHUB_REF_NAME" \
             --notes-file notes.md --verify-tag
+
+  # Submit the release to the CardputerZero store. Runs in the protected "store" environment,
+  # which only v* tags may use and which holds CZDEV_TOKEN (a classic PAT of the app owner with
+  # public_repo scope: czdev uploads the .deb to a release on the owner's fork of
+  # CardputerZero/packages and opens the publish PR; updates then merge automatically).
+  store:
+    if: github.ref_type == 'tag'
+    needs: release
+    runs-on: ubuntu-24.04
+    environment: store
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4  # czdev reads app-builder.json, screenshots and icon from here
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: beamhound-deb
+          path: dist
+
+      - name: Fetch czdev
+        run: |
+          mkdir -p .czdev-src
+          curl -fsSL "https://codeload.github.com/CardputerZero/AppBuilder/tar.gz/$CZDEV_COMMIT" \
+            | tar -xz -C .czdev-src --strip-components=2 "AppBuilder-$CZDEV_COMMIT/scripts/czdev"
+          # czdev records the uploader's public GitHub email in the public store manifest.
+          # Always use the noreply address instead (no personal email in package metadata).
+          f=.czdev-src/czdev/publish.py
+          [ "$(grep -c '    uploader_email = user.email or noreply$' "$f")" -eq 1 ] \
+            || { echo "::error::czdev changed where it reads the uploader email; review before publishing"; exit 1; }
+          sed -i 's/^    uploader_email = user.email or noreply$/    uploader_email = noreply/' "$f"
+          if grep -n 'user\.email' "$f"; then echo "::error::czdev still uses user.email"; exit 1; fi
+
+      - name: Publish to the CardputerZero store
+        env:
+          CZDEV_TOKEN: ${{ secrets.CZDEV_TOKEN }}
+        run: |
+          set -o pipefail
+          [ -n "$CZDEV_TOKEN" ] || { echo "::error::secret CZDEV_TOKEN is not set in the 'store' environment"; exit 1; }
+          deb=$(ls dist/*.deb)
+          # czdev reads its token from ~/.czdev/credentials (normally written by `czdev login`).
+          umask 077
+          mkdir -p ~/.czdev
+          python3 -c 'import json, os; json.dump({"github_token": os.environ["CZDEV_TOKEN"]}, open(os.path.expanduser("~/.czdev/credentials"), "w"))'
+          # czdev pushes the store branch over SSH; use HTTPS with the token instead (never written to disk).
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global credential.helper '!f() { echo username=x-access-token; echo "password=$CZDEV_TOKEN"; }; f'
+          git config --global user.name "Bryan Feller"
+          git config --global user.email "6282600+bfeller@users.noreply.github.com"
+          PYTHONPATH=.czdev-src python3 -m czdev publish --deb "$deb" | tee publish.log
+          pr=$(grep -o 'https://github.com/CardputerZero/packages/pull/[0-9]*' publish.log | tail -1 || true)
+          {
+            echo "### Store submission"
+            echo "Package: \`$(basename "$deb")\` (SHA-256 \`$(sha256sum "$deb" | cut -d' ' -f1)\`)"
+            echo "Pull request: ${pr:-see the log}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          rm -f ~/.czdev/credentials

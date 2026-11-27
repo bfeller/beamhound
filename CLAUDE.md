@@ -2,7 +2,8 @@
 
 IR remote identifier + universal remote app for the M5Stack Cardputer Zero (LVGL 9.5, C++17,
 320x170 framebuffer, LIRC IR, evdev keyboard). Published in the CardputerZero Application Store
-as package `beamhound` (share code BEAM). Release process: `docs/RELEASING.md`.
+as package `beamhound` (share code BEAM). Release process: `docs/RELEASING.md` (pushing a
+`v*` tag builds, releases and submits to the store via CI; no manual portal upload).
 
 ## Build and test
 
