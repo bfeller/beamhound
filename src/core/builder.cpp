@@ -64,6 +64,15 @@ std::string aliasKey(const std::string& brand, const std::set<std::string>& keys
     return keys.count(k) && k != brandKey(brand) ? k : "";
 }
 
+// Placeholder brand folders ("Unknown_Brand", "BrandUnknown", "No_Brand", "(Generic)") all mean
+// "no brand": they become one "Unknown" brand.
+bool isNoBrand(const std::string& key)
+{
+    static const std::set<std::string> keys = {"UNKNOWN", "UNKNOWNBRAND", "BRANDUNKNOWN", "GENERICUNKNOWNBRAND",
+                                               "NOBRAND", "GENERIC", "NONAME", "UNBRANDED"};
+    return keys.count(key) > 0;
+}
+
 std::string pretty(std::string s)
 {
     std::replace(s.begin(), s.end(), '_', ' ');
@@ -285,12 +294,19 @@ bool buildIndex(const std::string& rootDir, Index& ix, BuildReport& rep,
         for (const auto& e : entries) keys.insert(brandKey(e.brand));
         std::set<std::string> merged;
         for (auto& e : entries) {
+            const int weight = (e.rel.rfind("_Converted_", 0) == 0) ? 1 : 100;
+            if (isNoBrand(brandKey(e.brand))) {
+                e.brandKey = "UNKNOWN";
+                if (e.brand != "Unknown") merged.insert(e.brand);
+                spellings[e.brandKey]["Unknown"] += weight;
+                continue;
+            }
             std::string bare;
             const std::string a = aliasKey(e.brand, keys, bare);
             e.brandKey = a.empty() ? brandKey(e.brand) : a;
             if (!a.empty()) merged.insert(e.brand);
             // An alias votes with its bare spelling ("Pinnacle"), never as "TV SAMSUNG".
-            spellings[e.brandKey][a.empty() ? e.brand : bare] += (e.rel.rfind("_Converted_", 0) == 0) ? 1 : 100;
+            spellings[e.brandKey][a.empty() ? e.brand : bare] += weight;
         }
         rep.brandsMerged = static_cast<int>(merged.size());
     }

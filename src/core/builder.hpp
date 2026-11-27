@@ -11,8 +11,9 @@ namespace bh {
 
 // Revision of the builder's output. Bump it whenever a change to the builder alters the index
 // (brands, categories, signals): installed apps then rebuild their index from the database
-// already on the device. 1 = original, 2 = brand aliases folded ("TV SAMSUNG" -> Samsung).
-constexpr uint32_t kBuilderRev = 2;
+// already on the device. 1 = original, 2 = brand aliases folded ("TV SAMSUNG" -> Samsung),
+// 3 = placeholder brands ("Unknown Brand", "BrandUnknown", "No Brand", "(Generic)") -> Unknown.
+constexpr uint32_t kBuilderRev = 3;
 
 struct BuildReport {
     size_t files = 0;

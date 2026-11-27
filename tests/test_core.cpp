@@ -165,6 +165,11 @@ static void testBrandAliases()
         "_Converted_/CSV/D/Dream/Box/E.ir",
         "_Converted_/CSV/D/Dream_Multimedia/Box/F.ir",
         "_Converted_/CSV/D/Dream_Vision/Projector/G.ir",
+        "VCR/Unknown/H.ir",
+        "SoundBars/BrandUnknown/I.ir",
+        "Toys/Unknown-brand/J.ir",
+        "_Converted_/CSV/N/No_Brand/Box/K.ir",
+        "_Converted_/Pronto/0-9/(Generic)/L.ir",
     };
     int cmd = 1;
     for (const auto& f : files) {
@@ -188,7 +193,11 @@ static void testBrandAliases()
           brandOf["C"].c_str(), brandOf["D"].c_str());
     CHECK(brandOf["E"] == "Dream" && brandOf["F"] == "Dream Multimedia" && brandOf["G"] == "Dream Vision",
           "Dream brands: %s / %s / %s", brandOf["E"].c_str(), brandOf["F"].c_str(), brandOf["G"].c_str());
-    CHECK(rep.brandsMerged == 2, "brandsMerged = %d", rep.brandsMerged);
+    CHECK(brandOf["H"] == "Unknown" && brandOf["I"] == "Unknown" && brandOf["J"] == "Unknown" &&
+              brandOf["K"] == "Unknown" && brandOf["L"] == "Unknown",
+          "placeholder brands: %s / %s / %s / %s / %s", brandOf["H"].c_str(), brandOf["I"].c_str(),
+          brandOf["J"].c_str(), brandOf["K"].c_str(), brandOf["L"].c_str());
+    CHECK(rep.brandsMerged == 6, "brandsMerged = %d", rep.brandsMerged);
 }
 
 int main(int argc, char** argv)
