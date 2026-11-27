@@ -6,7 +6,7 @@ Portal: <https://dev.cardputer.cc/#/upload>
 
 - Debian package: `beamhound_<version>_arm64.deb` from the GitHub Release of the version tag (built by CI)
 - Package: `beamhound`
-- Current version: `0.2.0`
+- Current version: `0.2.1`
 - Architecture: `arm64`
 - Maintainer: `Bryan Feller <6282600+bfeller@users.noreply.github.com>`
 - APPLaunch desktop path: `/usr/share/APPLaunch/applications/beamhound.desktop`
@@ -77,3 +77,12 @@ Portal: <https://dev.cardputer.cc/#/upload>
 - Package SHA-256: `d5bccfec8e20edfe5ca454200d364806e51f15cea82394103c415816f9931f16` (the GitHub Release asset)
 - Actions URL: https://github.com/CardputerZero/packages/actions/runs/45932666829
 - Pull-request URL: https://github.com/CardputerZero/packages/pull/936
+
+### 0.2.1 (brand aliases folded; installed apps re-index on update) - first CI submission
+
+- Status: `merged` (submitted by the `store` CI job with `czdev publish`, no portal upload)
+- Submitted at: 2026-11-27T03:42Z, merged at 2026-11-27T03:43:09Z
+- Package SHA-256: `8da2c500a9624ce766beb003651dd482f41560667d4e08b30bd754daa58b99e6` (the GitHub Release asset)
+- Uploaded via: `bfeller/packages` release `czdev-buffer`; uploader email recorded as the noreply address
+- CI run: https://github.com/bfeller/beamhound/actions/runs/45935569644
+- Pull-request URL: https://github.com/CardputerZero/packages/pull/937
